@@ -3,8 +3,12 @@ const isGithubActions = process.env.GITHUB_ACTIONS || false;
 
 const nextConfig = {
   reactStrictMode: true,
-  output: 'export',
-  basePath: isGithubActions ? '/harmonylab' : '',
+  ...(isGithubActions
+    ? {
+        output: 'export',
+        basePath: '/harmonylab',
+      }
+    : {}),
   images: {
     unoptimized: true,
   },
