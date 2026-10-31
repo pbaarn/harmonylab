@@ -90,9 +90,12 @@ npm install
 
 ### Development Server
 
+You can run the development server with:
+
 ```bash
-npm run dev
+./dev.sh
 ```
+*(or double-click `dev.command` in macOS Finder, or run `npm run dev`)*
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
