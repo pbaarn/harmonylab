@@ -1,6 +1,8 @@
 # HarmonyLab 🎹
 *Inspired by Jeff Schneider’s Sick Chords Lab*
 
+**Live Demo**: [https://pbaarn.github.io/harmonylab](https://pbaarn.github.io/harmonylab)
+
 **HarmonyLab** is a modern piano chord voicing and reharmonization tool where chords are indexed and filtered by their **TOP NOTE** (melody soprano voice) as well as traditional chord roots and qualities.
 
 ---

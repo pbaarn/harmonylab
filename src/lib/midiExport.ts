@@ -204,11 +204,12 @@ export async function revealTimelineInFinder(
         action: 'reveal',
       }),
     });
+    if (!res.ok) throw new Error('Local API unavailable');
     const data = await res.json();
     return { success: true, message: data.message || 'Revealed in Finder!' };
   } catch (err) {
     downloadDataUri(midiData.dataUri, midiData.filename);
-    return { success: true, message: 'Downloaded MIDI file.' };
+    return { success: true, message: 'Downloaded MIDI! Drag from Downloads into Logic.' };
   }
 }
 
@@ -235,10 +236,12 @@ export async function copyTimelineMidiToClipboard(
         action: 'copy',
       }),
     });
+    if (!res.ok) throw new Error('Local API unavailable');
     const data = await res.json();
     return { success: true, message: data.message || 'Copied to clipboard!' };
   } catch (err) {
-    return { success: false, message: 'Failed to copy to clipboard.' };
+    downloadDataUri(midiData.dataUri, midiData.filename);
+    return { success: true, message: 'Downloaded MIDI to Downloads!' };
   }
 }
 
@@ -261,11 +264,12 @@ export async function revealVoicingInFinder(
         action: 'reveal',
       }),
     });
+    if (!res.ok) throw new Error('Local API unavailable');
     const data = await res.json();
     return { success: true, message: data.message || 'Revealed in Finder!' };
   } catch (err) {
     downloadDataUri(midiData.dataUri, midiData.filename);
-    return { success: true, message: 'Downloaded MIDI file.' };
+    return { success: true, message: 'Downloaded MIDI! Drag from Downloads into Logic.' };
   }
 }
 
