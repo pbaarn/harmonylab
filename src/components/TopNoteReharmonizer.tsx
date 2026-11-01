@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Voicing, ChordFamily, PitchClass } from '@/types/harmonylab';
 import { PITCH_CLASSES, normalizePitchClass } from '@/lib/theory';
 import { getVoicingsForTopNote, SEED_VOICINGS } from '@/lib/voicingsDatabase';
@@ -18,6 +18,7 @@ import {
   ArrowDown,
   Layers,
   Search,
+  History,
 } from 'lucide-react';
 
 interface TopNoteReharmonizerProps {
@@ -56,6 +57,20 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSurprising, setIsSurprising] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
+  const [recentSurprises, setRecentSurprises] = useState<Voicing[]>([]);
+
+  // Load recent surprises from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('harmonylab_recent_surprises');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setRecentSurprises(parsed.slice(0, 6));
+        }
+      }
+    } catch (e) {}
+  }, []);
 
   // Available matching voicings for current top note
   const matchingVoicings = useMemo(() => {
@@ -85,6 +100,16 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
 
     onSelectVoicing(surpriseChoice);
     audioEngine.playVoicing(surpriseChoice, { addBass, octaveOffset });
+
+    // Track the last 6 chords played by the surprise button
+    setRecentSurprises((prev) => {
+      const filtered = prev.filter((v) => v.id !== surpriseChoice.id);
+      const updated = [surpriseChoice, ...filtered].slice(0, 6);
+      try {
+        localStorage.setItem('harmonylab_recent_surprises', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
 
     setTimeout(() => {
       setIsSurprising(false);
@@ -230,6 +255,65 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Last 6 Chords Played by Surprise Button */}
+        {recentSurprises.length > 0 && (
+          <div className="mt-3.5 pt-3 border-t border-warm-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 animate-fadeIn">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold shrink-0">
+              <History className="w-3.5 h-3.5 text-amber-500" />
+              <span>Surprise History (Last 6):</span>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap flex-1 justify-start md:justify-end">
+              {recentSurprises.map((chord, idx) => {
+                const isSelected = selectedVoicing?.id === chord.id;
+                return (
+                  <button
+                    key={`${chord.id}-${idx}`}
+                    type="button"
+                    onClick={() => {
+                      onSelectVoicing(chord);
+                      audioEngine.playVoicing(chord, { addBass, octaveOffset });
+                    }}
+                    className={`
+                      group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border
+                      ${
+                        isSelected
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-sm ring-2 ring-blue-300 scale-102'
+                          : 'bg-warm-100 hover:bg-white text-slate-800 border-warm-300 hover:border-blue-400 hover:shadow-xs'
+                      }
+                    `}
+                    title={`Audition ${chord.chordSymbol} (${chord.name}) and update 'Add to Progression'`}
+                  >
+                    <Volume2 className={`w-3 h-3 ${isSelected ? 'text-white' : 'text-slate-400 group-hover:text-blue-600'}`} />
+                    <span className="font-sans font-bold">{chord.chordSymbol}</span>
+                    <span
+                      className={`text-[9px] font-mono px-1 py-0.2 rounded ${
+                        isSelected ? 'bg-blue-700 text-blue-100' : 'bg-warm-200 text-slate-600'
+                      }`}
+                    >
+                      {chord.topNote}
+                    </span>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setRecentSurprises([]);
+                  try {
+                    localStorage.removeItem('harmonylab_recent_surprises');
+                  } catch (e) {}
+                }}
+                className="text-[10px] text-slate-400 hover:text-rose-600 transition px-1.5 py-0.5 rounded ml-1"
+                title="Clear surprise chord history"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Pitch Class & Octave Selector */}
         <div className="mt-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
