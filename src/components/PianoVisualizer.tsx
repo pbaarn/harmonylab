@@ -160,9 +160,14 @@ export const PianoVisualizer: React.FC<PianoVisualizerProps> = ({
 
       {/* Piano Keyboard Container */}
       <div className="relative w-full overflow-x-auto pb-2 select-none">
-        <div className="relative min-w-[700px] h-40 bg-slate-900 rounded-xl p-1.5 shadow-inner border border-slate-300">
+        <div className="relative min-w-[720px] h-48 bg-slate-950 rounded-xl p-1.5 shadow-inner border border-slate-300">
+          {/* Classic Piano Fallboard & Red Felt Keybed Strip */}
+          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-b from-slate-900 to-slate-800 rounded-t-xl z-40 border-b border-black">
+            <div className="absolute bottom-0 left-1 right-1 h-[2.5px] bg-red-800/90 shadow-2xs" />
+          </div>
+
           {/* White Keys */}
-          <div className="flex w-full h-full">
+          <div className="flex w-full h-full pt-1.5">
             {whiteKeys.map((k) => {
               const isHeld = activeNotesSet.has(k.midi);
               const isTop = k.midi === topNoteMidi;
@@ -175,16 +180,16 @@ export const PianoVisualizer: React.FC<PianoVisualizerProps> = ({
                   onClick={() => handleKeyClick(k.midi)}
                   title={`${k.noteName} (MIDI ${k.midi})`}
                   className={`
-                    flex-1 h-full rounded-b-md transition-all duration-75 relative group flex flex-col justify-end items-center pb-2
-                    border-r border-slate-200 last:border-r-0
+                    flex-1 h-full rounded-b-md transition-all duration-75 relative group flex flex-col justify-end items-center pb-2.5
+                    border-r border-slate-200 last:border-r-0 shadow-2xs
                     ${
                       isTop
-                        ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400 z-10'
+                        ? 'bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-md ring-2 ring-blue-400 z-10'
                         : isBass
-                        ? 'bg-amber-500 text-slate-900 ring-2 ring-amber-400 z-10'
+                        ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-slate-950 ring-2 ring-amber-400 z-10 font-bold'
                         : isHeld
-                        ? 'bg-amber-300 hover:bg-amber-400 text-slate-900 border-amber-400 z-10 shadow-sm'
-                        : 'bg-white hover:bg-slate-50 active:bg-blue-50 text-slate-400'
+                        ? 'bg-gradient-to-b from-amber-200 to-amber-300 hover:from-amber-300 hover:to-amber-400 text-slate-950 border-amber-300 z-10 shadow-sm font-bold'
+                        : 'bg-gradient-to-b from-white via-white to-slate-50 hover:bg-slate-50 active:bg-blue-50 text-slate-400'
                     }
                   `}
                 >
@@ -221,16 +226,16 @@ export const PianoVisualizer: React.FC<PianoVisualizerProps> = ({
             })}
           </div>
 
-          {/* Black Keys Layer */}
-          <div className="absolute top-1.5 left-1.5 right-1.5 pointer-events-none h-26">
+          {/* Black Keys Layer (Proper 64% Piano Height) */}
+          <div className="absolute top-2 left-1.5 right-1.5 pointer-events-none h-[64%]">
             {blackKeys.map((bk) => {
               const isHeld = activeNotesSet.has(bk.midi);
               const isTop = bk.midi === topNoteMidi;
               const isBass = bk.midi === bassNoteMidi;
 
               const whiteWidthPct = 100 / totalWhites;
-              const leftPct = (bk.whiteIndexBefore + 1) * whiteWidthPct - whiteWidthPct * 0.32;
-              const keyWidthPct = whiteWidthPct * 0.64;
+              const keyWidthPct = whiteWidthPct * 0.62;
+              const leftPct = (bk.whiteIndexBefore + 1) * whiteWidthPct - keyWidthPct / 2;
 
               return (
                 <button
@@ -243,15 +248,15 @@ export const PianoVisualizer: React.FC<PianoVisualizerProps> = ({
                     width: `${keyWidthPct}%`,
                   }}
                   className={`
-                    absolute top-0 h-full rounded-b-[4px] pointer-events-auto transition-all duration-75 flex flex-col justify-end items-center pb-2 shadow-md
+                    absolute top-0 h-full rounded-b-[4px] pointer-events-auto transition-all duration-75 flex flex-col justify-end items-center pb-2.5 shadow-md border-x border-b
                     ${
                       isTop
-                        ? 'bg-blue-600 text-white ring-2 ring-blue-300 z-30'
+                        ? 'bg-gradient-to-b from-blue-500 to-blue-700 text-white ring-2 ring-blue-300 z-30 border-blue-800'
                         : isBass
-                        ? 'bg-amber-600 text-slate-950 ring-2 ring-amber-300 z-30'
+                        ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-slate-950 ring-2 ring-amber-300 z-30 border-amber-800 font-bold'
                         : isHeld
-                        ? 'bg-amber-400 text-slate-950 ring-1 ring-amber-300 z-20 shadow-md font-bold'
-                        : 'bg-slate-900 hover:bg-slate-800 active:bg-blue-900 z-20 text-slate-500 border border-slate-950'
+                        ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-slate-950 ring-2 ring-amber-300 z-20 shadow-md font-bold border-amber-600'
+                        : 'bg-gradient-to-b from-slate-800 via-slate-900 to-black hover:from-slate-700 hover:to-slate-950 active:bg-blue-900 z-20 text-slate-500 border-black/80'
                     }
                   `}
                 >
