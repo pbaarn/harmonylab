@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Voicing, ChordFamily, PitchClass } from '@/types/harmonylab';
-import { PITCH_CLASSES, normalizePitchClass } from '@/lib/theory';
-import { getVoicingsForTopNote, SEED_VOICINGS } from '@/lib/voicingsDatabase';
+import { PITCH_CLASSES, calculateIntervalName } from '@/lib/theory';
+import { getVoicingsForTopNote } from '@/lib/voicingsDatabase';
 import { audioEngine } from '@/lib/audio';
 import { exportVoicingToMidi } from '@/lib/midiExport';
 import {
@@ -19,6 +19,9 @@ import {
   Layers,
   Search,
   History,
+  Play,
+  LayoutList,
+  LayoutGrid,
 } from 'lucide-react';
 
 interface TopNoteReharmonizerProps {
@@ -58,6 +61,7 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
   const [isSurprising, setIsSurprising] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const [recentSurprises, setRecentSurprises] = useState<Voicing[]>([]);
+  const [viewMode, setViewMode] = useState<'column' | 'grid'>('column');
 
   // Load recent surprises from localStorage on mount
   useEffect(() => {
@@ -122,263 +126,108 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
     audioEngine.playVoicing(voicing, { addBass, octaveOffset });
   };
 
-  const handleExportMidi = (e: React.MouseEvent, voicing: Voicing) => {
-    e.stopPropagation();
-    exportVoicingToMidi(voicing, { addBass, octaveOffset });
-  };
-
   return (
-    <div className="flex flex-col gap-5 w-full">
-      {/* Top Filter Bar: Melody Soprano Picker & Controls */}
-      <div className="bg-white rounded-2xl border border-warm-200 shadow-sm p-4 sm:p-6">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-warm-200">
+    <div className="flex flex-col gap-4 w-full">
+      {/* 1. Filter Controls Card */}
+      <div className="bg-white rounded-2xl border border-warm-200 shadow-sm p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-2 pb-3 border-b border-warm-200">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-              <h2 className="text-base font-semibold text-slate-900 tracking-tight">
-                Top-Note Reharmonizer
-              </h2>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Choose your target melody soprano note to discover all matching jazz & soul substitutions.
-            </p>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block">
+              FILTER & SEARCH
+            </span>
+            <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+              Top Note: {selectedPitchClass}{selectedOctave}
+            </h3>
           </div>
 
-          {/* Quick Utility Toggles: Add Bass, Octave Shift, Surprise Me */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Add Bass Toggle */}
-            <button
-              type="button"
-              onClick={onToggleAddBass}
-              className={`
-                inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border
-                ${
-                  addBass
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                    : 'bg-warm-50 hover:bg-warm-100 text-slate-700 border-warm-300'
-                }
-              `}
-              title="Adds a deep octave root note below the voicing for a full-band feel"
-            >
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  addBass ? 'bg-amber-400' : 'bg-slate-300'
-                }`}
-              />
-              <span>Add Bass Note</span>
-            </button>
-
-            {/* Octave Transpose (-12 / 0 / +12) */}
-            <div className="inline-flex items-center rounded-lg border border-warm-300 bg-warm-50 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => onSetOctaveOffset(octaveOffset - 12)}
-                disabled={octaveOffset <= -12}
-                className={`p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-40 transition`}
-                title="Transpose down 1 octave (-12 semitones)"
-              >
-                <ArrowDown className="w-3.5 h-3.5" />
-              </button>
-              <span className="px-2 font-mono text-[11px] font-semibold text-slate-800">
-                {octaveOffset === 0 ? '8va Normal' : octaveOffset > 0 ? `+${octaveOffset} st` : `${octaveOffset} st`}
-              </span>
-              <button
-                type="button"
-                onClick={() => onSetOctaveOffset(octaveOffset + 12)}
-                disabled={octaveOffset >= 12}
-                className={`p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-40 transition`}
-                title="Transpose up 1 octave (+12 semitones)"
-              >
-                <ArrowUp className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Surprise Me Button */}
+          {/* Surprise Me & Quick Add */}
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={handleSurpriseMe}
               className={`
-                inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold text-white shadow-sm transition-all
-                ${
-                  isSurprising
-                    ? 'scale-95 bg-blue-700'
-                    : 'bg-blue-600 hover:bg-blue-700 active:scale-95 hover:shadow'
-                }
+                inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white shadow-2xs transition-all
+                ${isSurprising ? 'scale-95 bg-blue-700' : 'bg-blue-600 hover:bg-blue-700 active:scale-95'}
               `}
-              title="Pick a random matching chord voicing with this top note and audition it"
+              title="Surprise me with a random voicing under this melody note"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Surprise Me!</span>
-            </button>
-
-            {/* Add Selected Chord to Progression Button */}
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedVoicing) {
-                  onAddToTimeline(selectedVoicing);
-                  setJustAdded(true);
-                  setTimeout(() => setJustAdded(false), 1500);
-                }
-              }}
-              disabled={!selectedVoicing}
-              className={`
-                inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all border
-                ${
-                  justAdded
-                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
-                    : selectedVoicing
-                    ? 'bg-slate-900 hover:bg-black text-white border-slate-900 shadow-sm active:scale-95'
-                    : 'bg-warm-100 text-slate-400 border-warm-200 cursor-not-allowed'
-                }
-              `}
-              title={
-                selectedVoicing
-                  ? `Add ${selectedVoicing.chordSymbol} to the timeline progression`
-                  : 'Select or surprise a chord first'
-              }
-            >
-              {justAdded ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-white" />
-                  <span>Added {selectedVoicing?.chordSymbol}!</span>
-                </>
-              ) : (
-                <>
-                  <Plus className="w-3.5 h-3.5 text-blue-400" />
-                  <span>
-                    Add to Progression
-                    {selectedVoicing ? ` (${selectedVoicing.chordSymbol})` : ''}
-                  </span>
-                </>
-              )}
+              <span>Surprise Me</span>
             </button>
           </div>
         </div>
 
-        {/* Last 6 Chords Played by Surprise Button */}
-        {recentSurprises.length > 0 && (
-          <div className="mt-3.5 pt-3 border-t border-warm-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 animate-fadeIn">
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold shrink-0">
-              <History className="w-3.5 h-3.5 text-amber-500" />
-              <span>Surprise History (Last 6):</span>
-            </div>
-
-            <div className="flex items-center gap-1.5 flex-wrap flex-1 justify-start md:justify-end">
-              {recentSurprises.map((chord, idx) => {
-                const isSelected = selectedVoicing?.id === chord.id;
-                return (
-                  <button
-                    key={`${chord.id}-${idx}`}
-                    type="button"
-                    onClick={() => {
-                      onSelectVoicing(chord);
-                      audioEngine.playVoicing(chord, { addBass, octaveOffset });
-                    }}
-                    className={`
-                      group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border
-                      ${
-                        isSelected
-                          ? 'bg-blue-600 border-blue-600 text-white shadow-sm ring-2 ring-blue-300 scale-102'
-                          : 'bg-warm-100 hover:bg-white text-slate-800 border-warm-300 hover:border-blue-400 hover:shadow-xs'
-                      }
-                    `}
-                    title={`Audition ${chord.chordSymbol} (${chord.name}) and update 'Add to Progression'`}
-                  >
-                    <Volume2 className={`w-3 h-3 ${isSelected ? 'text-white' : 'text-slate-400 group-hover:text-blue-600'}`} />
-                    <span className="font-sans font-bold">{chord.chordSymbol}</span>
-                    <span
-                      className={`text-[9px] font-mono px-1 py-0.2 rounded ${
-                        isSelected ? 'bg-blue-700 text-blue-100' : 'bg-warm-200 text-slate-600'
-                      }`}
-                    >
-                      {chord.topNote}
-                    </span>
-                  </button>
-                );
-              })}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setRecentSurprises([]);
-                  try {
-                    localStorage.removeItem('harmonylab_recent_surprises');
-                  } catch (e) {}
-                }}
-                className="text-[10px] text-slate-400 hover:text-rose-600 transition px-1.5 py-0.5 rounded ml-1"
-                title="Clear surprise chord history"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Pitch Class & Octave Selector */}
-        <div className="mt-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-          <div className="flex-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5 block">
-              1. Select Melody / Top Note Pitch:
-            </label>
-            <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5">
-              {PITCH_CLASSES.map((pc) => {
-                const isSelected = selectedPitchClass === pc;
-                return (
-                  <button
-                    key={pc}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPitchClass(pc);
-                    }}
-                    className={`
-                      py-2 px-1 text-center rounded-lg text-xs font-bold transition-all
-                      ${
-                        isSelected
-                          ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-300'
-                          : 'bg-warm-100 hover:bg-warm-200 text-slate-800 border border-warm-200'
-                      }
-                    `}
-                  >
-                    {pc}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Octave Range Selector */}
-          <div className="shrink-0">
-            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5 block">
-              2. Melody Octave:
-            </label>
-            <div className="inline-flex rounded-lg border border-warm-300 p-1 bg-warm-100 gap-1">
-              {[4, 5, 6].map((oct) => (
+        {/* Melody Pitch Class Selector Grid */}
+        <div className="mt-3">
+          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            01 • Melody Soprano Pitch:
+          </label>
+          <div className="grid grid-cols-6 gap-1">
+            {PITCH_CLASSES.map((pc) => {
+              const isSelected = selectedPitchClass === pc;
+              return (
                 <button
-                  key={oct}
+                  key={pc}
                   type="button"
-                  onClick={() => setSelectedOctave(oct)}
+                  onClick={() => setSelectedPitchClass(pc)}
                   className={`
-                    px-3 py-1 rounded text-xs font-bold transition-all
+                    py-1.5 text-center rounded-lg text-xs font-bold transition-all
                     ${
-                      selectedOctave === oct
-                        ? 'bg-white text-blue-700 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
+                      isSelected
+                        ? 'bg-blue-600 text-white shadow-2xs ring-1 ring-blue-300'
+                        : 'bg-warm-100 hover:bg-warm-200 text-slate-800 border border-warm-200'
                     }
                   `}
                 >
-                  Octave {oct} ({selectedPitchClass}
-                  {oct})
+                  {pc}
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Chord Family Pills & Search Filter */}
-        <div className="mt-4 pt-3 border-t border-warm-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Filter className="w-3.5 h-3.5 text-slate-400 mr-1" />
+        {/* Octave Selector & Search Row */}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase mr-1">Octave:</span>
+            {[4, 5, 6].map((oct) => (
+              <button
+                key={oct}
+                type="button"
+                onClick={() => setSelectedOctave(oct)}
+                className={`
+                  px-2 py-1 rounded text-xs font-mono font-bold transition
+                  ${
+                    selectedOctave === oct
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'bg-warm-100 text-slate-600 hover:bg-warm-200 border border-warm-200'
+                  }
+                `}
+              >
+                {oct}
+              </button>
+            ))}
+          </div>
+
+          {/* Search Box */}
+          <div className="relative flex-1 max-w-[170px]">
+            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full text-[11px] pl-7 pr-2 py-1 rounded-lg border border-warm-300 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-slate-400"
+            />
+          </div>
+        </div>
+
+        {/* Chord Family Pills */}
+        <div className="mt-3 pt-2.5 border-t border-warm-200/80">
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+            02 • Chord Family:
+          </label>
+          <div className="flex flex-wrap items-center gap-1">
             {FAMILIES.map((family) => {
               const active = selectedFamily === family;
               return (
@@ -387,10 +236,10 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
                   type="button"
                   onClick={() => setSelectedFamily(family)}
                   className={`
-                    px-2.5 py-1 rounded-md text-xs font-medium transition-all
+                    px-2 py-0.5 rounded text-[11px] font-medium transition-all
                     ${
                       active
-                        ? 'bg-slate-800 text-white shadow-sm'
+                        ? 'bg-slate-800 text-white shadow-2xs font-bold'
                         : 'bg-warm-100 hover:bg-warm-200 text-slate-600'
                     }
                   `}
@@ -400,155 +249,208 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
               );
             })}
           </div>
+        </div>
 
-          {/* Search box */}
-          <div className="relative w-full sm:w-56">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search symbol, style..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-warm-300 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-slate-400"
-            />
+        {/* Last 6 Surprise Chords History */}
+        {recentSurprises.length > 0 && (
+          <div className="mt-3 pt-2.5 border-t border-warm-200/80">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                <History className="w-3 h-3 text-amber-500" />
+                Recent Surprises:
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecentSurprises([]);
+                  try {
+                    localStorage.removeItem('harmonylab_recent_surprises');
+                  } catch (e) {}
+                }}
+                className="text-[9px] text-slate-400 hover:text-rose-600 transition"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1">
+              {recentSurprises.map((chord, idx) => {
+                const isSelected = selectedVoicing?.id === chord.id;
+                return (
+                  <button
+                    key={`surprise-${chord.id}-${idx}`}
+                    type="button"
+                    onClick={() => {
+                      onSelectVoicing(chord);
+                      audioEngine.playVoicing(chord, { addBass, octaveOffset });
+                    }}
+                    className={`
+                      inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold transition border
+                      ${
+                        isSelected
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-2xs'
+                          : 'bg-warm-50 hover:bg-white text-slate-800 border-warm-300'
+                      }
+                    `}
+                    title={`Audition ${chord.chordSymbol}`}
+                  >
+                    <span>{chord.chordSymbol}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 2. Narrow Chords Column (The Red Box in Screenshot) */}
+      <div className="bg-white rounded-2xl border border-warm-200 shadow-sm p-3.5 flex flex-col">
+        {/* Column Header */}
+        <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-warm-200 px-1">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-blue-600" />
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Voicings ({matchingVoicings.length})
+            </h4>
+          </div>
+
+          {/* View mode toggle */}
+          <div className="inline-flex rounded-lg border border-warm-200 bg-warm-50 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('column')}
+              className={`p-1 rounded transition ${viewMode === 'column' ? 'bg-white shadow-2xs text-blue-600' : 'text-slate-400 hover:text-slate-700'}`}
+              title="Narrow Column View (Sick Chords Lab style)"
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`p-1 rounded transition ${viewMode === 'grid' ? 'bg-white shadow-2xs text-blue-600' : 'text-slate-400 hover:text-slate-700'}`}
+              title="Expanded Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* Voicings Results Count */}
-      <div className="flex items-center justify-between px-1">
-        <p className="text-xs text-slate-600 font-medium">
-          Showing <span className="font-bold text-slate-900">{matchingVoicings.length}</span> voicings with top note{' '}
-          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-            {selectedPitchClass}
-            {selectedOctave}
-          </span>
-        </p>
-        <span className="text-xs text-slate-400">Click any card to inspect & audition</span>
-      </div>
+        {/* Narrow Scrollable Column Container */}
+        {viewMode === 'column' ? (
+          <div className="flex flex-col gap-1.5 max-h-[560px] overflow-y-auto pr-1 select-none">
+            {matchingVoicings.map((v, idx) => {
+              const isSelected = selectedVoicing?.id === v.id;
+              const topInterval = calculateIntervalName(v.root, v.topNote);
 
-      {/* Voicings Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {matchingVoicings.map((v) => {
-          const isSelected = selectedVoicing?.id === v.id;
+              return (
+                <div
+                  key={v.id}
+                  onClick={() => {
+                    onSelectVoicing(v);
+                    audioEngine.playVoicing(v, { addBass, octaveOffset });
+                  }}
+                  className={`
+                    group flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all
+                    ${
+                      isSelected
+                        ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-200 shadow-2xs'
+                        : 'bg-warm-50/60 hover:bg-white border-warm-200 hover:border-slate-300'
+                    }
+                  `}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Play Button Icon */}
+                    <button
+                      type="button"
+                      onClick={(e) => handlePlayVoicing(e, v)}
+                      className={`
+                        w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition
+                        ${
+                          isSelected
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-warm-200/80 group-hover:bg-blue-600 text-slate-600 group-hover:text-white'
+                        }
+                      `}
+                      title="Play Voicing"
+                    >
+                      <Play className="w-3 h-3 fill-current ml-0.5" />
+                    </button>
 
-          return (
-            <div
-              key={v.id}
-              onClick={() => {
-                onSelectVoicing(v);
-                audioEngine.playVoicing(v, { addBass, octaveOffset });
-              }}
-              className={`
-                group relative bg-white rounded-xl border p-4 cursor-pointer transition-all hover:shadow-md flex flex-col justify-between
-                ${
-                  isSelected
-                    ? 'border-blue-500 ring-2 ring-blue-100 bg-blue-50/20 shadow'
-                    : 'border-warm-200 hover:border-blue-300'
-                }
-              `}
-            >
-              {/* Header: Chord Symbol & Family Badge */}
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-900 tracking-tight font-sans group-hover:text-blue-600 transition-colors">
-                      {v.chordSymbol}
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium line-clamp-1">{v.name}</p>
+                    {/* Voicing Index */}
+                    <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                      #{String(idx + 1).padStart(3, '0')}
+                    </span>
+
+                    {/* Chord Symbol & Top Voice Info */}
+                    <div className="min-w-0 flex flex-col">
+                      <span className={`text-sm font-bold font-sans tracking-tight truncate leading-tight ${isSelected ? 'text-blue-900' : 'text-slate-900 group-hover:text-blue-600'}`}>
+                        {v.chordSymbol}
+                      </span>
+                      <span className="text-[10px] text-slate-500 truncate font-mono mt-0.5">
+                        TOP VOICE: {v.topNote} ({topInterval})
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+
+                  {/* Family Tag */}
+                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${isSelected ? 'bg-blue-100 text-blue-800' : 'bg-warm-200/70 text-slate-600'}`}>
+                    {v.family}
+                  </span>
+                </div>
+              );
+            })}
+
+            {matchingVoicings.length === 0 && (
+              <div className="py-12 text-center text-xs text-slate-400 italic">
+                No matching voicings. Try selecting another melody note or family.
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Expanded Grid View Fallback */
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[560px] overflow-y-auto pr-1">
+            {matchingVoicings.map((v, idx) => {
+              const isSelected = selectedVoicing?.id === v.id;
+              const topInterval = calculateIntervalName(v.root, v.topNote);
+
+              return (
+                <div
+                  key={v.id}
+                  onClick={() => {
+                    onSelectVoicing(v);
+                    audioEngine.playVoicing(v, { addBass, octaveOffset });
+                  }}
+                  className={`
+                    p-3 rounded-xl border cursor-pointer transition flex flex-col justify-between
+                    ${
+                      isSelected
+                        ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200'
+                        : 'bg-warm-50 hover:bg-white border-warm-200 hover:border-slate-300'
+                    }
+                  `}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-[9px] font-mono text-slate-400 block">
+                        #{String(idx + 1).padStart(3, '0')}
+                      </span>
+                      <span className="text-sm font-bold font-sans text-slate-900">
+                        {v.chordSymbol}
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-warm-200 text-slate-700">
                       {v.family}
                     </span>
-                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                      Top: {v.topNote}
-                    </span>
+                  </div>
+                  <div className="mt-2 text-[10px] text-slate-500 font-mono">
+                    TOP: {v.topNote} ({topInterval})
                   </div>
                 </div>
-
-                {/* Description */}
-                {v.description && (
-                  <p className="text-xs text-slate-600 line-clamp-2 my-2 leading-relaxed">
-                    {v.description}
-                  </p>
-                )}
-
-                {/* Interval Recipe Chips */}
-                <div className="flex flex-wrap items-center gap-1 my-2.5">
-                  {v.recipe.map((step, idx) => (
-                    <span
-                      key={idx}
-                      className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warm-100 text-slate-700 border border-warm-200"
-                    >
-                      {step}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Style Tags */}
-                <div className="flex flex-wrap items-center gap-1 mb-3">
-                  {v.styleTags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-50 text-slate-500"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Card Footer Actions */}
-              <div className="pt-3 border-t border-warm-100 flex items-center justify-between gap-2 mt-auto">
-                <button
-                  type="button"
-                  onClick={(e) => handlePlayVoicing(e, v)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 transition"
-                  title="Audition Voicing Sound"
-                >
-                  <Volume2 className="w-3.5 h-3.5" />
-                  <span>Play</span>
-                </button>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={(e) => handleExportMidi(e, v)}
-                    className="p-1.5 rounded-md text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition"
-                    title="Export single chord to .mid"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddToTimeline(v);
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 transition"
-                    title="Add this chord to the timeline sequencer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>To Timeline</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        )}
       </div>
-
-      {matchingVoicings.length === 0 && (
-        <div className="bg-white rounded-2xl border border-dashed border-warm-300 p-12 text-center">
-          <Music className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-          <p className="text-sm font-semibold text-slate-700">No matching voicings found</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Try switching family to &quot;All&quot; or selecting a different melody note.
-          </p>
-        </div>
-      )}
     </div>
   );
 };

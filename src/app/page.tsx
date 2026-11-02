@@ -126,59 +126,68 @@ export default function Home() {
       />
 
       {/* Main App Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-8">
-        {/* Subtle Editorial Header Introduction */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-2">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-6 flex flex-col gap-5">
+        {/* Editorial Subtitle */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-serif font-black text-slate-900 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-serif font-black text-slate-900 tracking-tight">
               HarmonyLab
             </h1>
-            <p className="text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-              In real songwriting and arranging, chords are governed by the soprano melody. Choose any top note to instantly unlock rich Jazz, Neo-Soul, Gospel, and R&B reharmonizations.
+            <p className="text-xs text-slate-600 mt-0.5 max-w-2xl leading-relaxed">
+              Top-note piano voicings & reharmonizer. Browse chords in the narrow column to audition on the piano and build progressions.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-stretch md:self-auto bg-white border border-warm-200 rounded-xl px-3.5 py-2 text-xs text-slate-600 shadow-xs">
-            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+          <div className="flex items-center gap-2 self-stretch md:self-auto bg-white border border-warm-200 rounded-xl px-3 py-1.5 text-xs text-slate-600 shadow-2xs">
+            <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span>
-              Tip: Click any key on the visualizer to hear it, or hit &quot;Surprise Me&quot; to audition random voicings.
+              Tip: Click any chord row in the left column to play and view its layout.
             </span>
           </div>
         </div>
 
-        {/* 1. Interactive 61-Key Visualizer */}
-        <section>
-          <PianoVisualizer
-            activeVoicing={activeVoicing}
-            addBass={addBass}
-            octaveOffset={octaveOffset + activeVoicingOctave}
-          />
-        </section>
+        {/* 2-Column Studio Workbench (Sick Chords Lab style) */}
+        <div className="flex flex-col lg:flex-row items-start gap-6 w-full">
+          {/* Left Column: Filter Panel & Narrow Chords List */}
+          <div className="w-full lg:w-[360px] xl:w-[390px] shrink-0">
+            <TopNoteReharmonizer
+              selectedVoicing={activeVoicing}
+              onSelectVoicing={handleSelectVoicing}
+              onAddToTimeline={handleAddToTimeline}
+              addBass={addBass}
+              onToggleAddBass={() => setAddBass(!addBass)}
+              octaveOffset={octaveOffset}
+              onSetOctaveOffset={setOctaveOffset}
+            />
+          </div>
 
-        {/* 2. Reharmonizer Timeline / Sequencer (4/4 Measure Strip) */}
-        <section>
-          <ReharmonizerTimeline
-            blocks={timelineBlocks}
-            onUpdateBlocks={setTimelineBlocks}
-            onSelectVoicingForInspection={handleSelectVoicingForInspection}
-            addBass={addBass}
-            octaveOffset={octaveOffset}
-            onOpenPrintModal={() => setIsPrintModalOpen(true)}
-          />
-        </section>
+          {/* Right Stage: Interactive Piano Visualizer & Reharmonizer Timeline */}
+          <div className="flex-1 w-full flex flex-col gap-5 min-w-0">
+            {/* 1. Piano Visualizer with Note Names, Recipe, Playback, and Add Chord to Progression */}
+            <section>
+              <PianoVisualizer
+                activeVoicing={activeVoicing}
+                addBass={addBass}
+                onToggleAddBass={() => setAddBass(!addBass)}
+                octaveOffset={octaveOffset + activeVoicingOctave}
+                onSetOctaveOffset={setOctaveOffset}
+                onAddToTimeline={handleAddToTimeline}
+              />
+            </section>
 
-        {/* 3. Top-Note Reharmonizer Filter & Voicings Database */}
-        <section>
-          <TopNoteReharmonizer
-            selectedVoicing={activeVoicing}
-            onSelectVoicing={handleSelectVoicing}
-            onAddToTimeline={handleAddToTimeline}
-            addBass={addBass}
-            onToggleAddBass={() => setAddBass(!addBass)}
-            octaveOffset={octaveOffset}
-            onSetOctaveOffset={setOctaveOffset}
-          />
-        </section>
+            {/* 2. Reharmonizer Timeline / Sequencer (4/4 Measure Strip) */}
+            <section>
+              <ReharmonizerTimeline
+                blocks={timelineBlocks}
+                onUpdateBlocks={setTimelineBlocks}
+                onSelectVoicingForInspection={handleSelectVoicingForInspection}
+                addBass={addBass}
+                octaveOffset={octaveOffset}
+                onOpenPrintModal={() => setIsPrintModalOpen(true)}
+              />
+            </section>
+          </div>
+        </div>
       </main>
 
       {/* Printable Sheet Modal */}

@@ -186,6 +186,47 @@ class HarmonyAudioEngine {
     });
   }
 
+  /**
+   * Play an arpeggio in either upward or downward direction
+   */
+  playArpeggio(
+    voicing: Voicing,
+    direction: 'up' | 'down' = 'up',
+    options: {
+      noteDuration?: number;
+      addBass?: boolean;
+      octaveOffset?: number;
+      stepMs?: number;
+    } = {}
+  ) {
+    const {
+      noteDuration = 1.8,
+      addBass = true,
+      octaveOffset = 0,
+      stepMs = 110,
+    } = options;
+
+    let notes = voicing.midiNotes.map((n) => n + octaveOffset);
+
+    if (addBass) {
+      const bassMidi = (voicing.bassNoteMidi ?? notes[0] - 12) + octaveOffset;
+      const adjustedBass = bassMidi > 46 ? bassMidi - 12 : bassMidi;
+      notes = [adjustedBass, ...notes];
+    }
+
+    if (direction === 'down') {
+      notes = [...notes].reverse();
+    }
+
+    const totalNotes = notes.length;
+    notes.forEach((midi, index) => {
+      const isTop = (direction === 'up' && index === totalNotes - 1) || (direction === 'down' && index === 0);
+      const delay = index * (stepMs / 1000);
+      const velocity = isTop ? 0.95 : 0.78;
+      this.playNote(midi, noteDuration, velocity, isTop, delay);
+    });
+  }
+
   setMuted(muted: boolean) {
     this.isMuted = muted;
     if (this.masterGain && this.audioCtx) {
