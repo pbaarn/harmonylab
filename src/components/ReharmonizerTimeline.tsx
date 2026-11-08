@@ -176,6 +176,11 @@ export const ReharmonizerTimeline: React.FC<ReharmonizerTimelineProps> = ({
         return;
       }
 
+      // Prevent rapid auto-repeats when holding a key down
+      if (e.repeat) {
+        return;
+      }
+
       if (e.code === 'Space') {
         e.preventDefault(); // Prevent browser scrolling
         togglePlay();

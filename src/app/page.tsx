@@ -193,6 +193,11 @@ export default function Home() {
         return;
       }
 
+      // Prevent rapid auto-repeats when holding a key down
+      if (e.repeat) {
+        return;
+      }
+
       // 1. Add Last Played Chord to Progression: Plus sign (+, =, NumpadAdd)
       if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd' || e.code === 'Equal') {
         if (activeVoicing) {
