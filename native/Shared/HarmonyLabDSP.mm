@@ -51,6 +51,14 @@ void Engine::setLiveHarmonizerEnabled(bool enabled) {
     mLiveHarmonizerEnabled.store(enabled, std::memory_order_relaxed);
 }
 
+void Engine::setSurpriseModeEnabled(bool enabled) {
+    mSurpriseModeEnabled.store(enabled, std::memory_order_relaxed);
+}
+
+void Engine::setSelectedFamily(uint8_t familyCode) {
+    mSelectedFamily.store(familyCode, std::memory_order_relaxed);
+}
+
 void Engine::setAddBassEnabled(bool enabled) {
     mAddBassEnabled.store(enabled, std::memory_order_relaxed);
 }
@@ -71,12 +79,10 @@ void Engine::process(
 ) {
     if (!midiOutputBlock) return;
 
-    // Check host transport state
     AUEventSampleTime baseTime = (timestamp && (timestamp->mFlags & kAudioTimeStampSampleTimeValid))
                                  ? (AUEventSampleTime)timestamp->mSampleTime
                                  : AUEventSampleTimeImmediate;
 
-    // Process incoming MIDI events (both MIDI 1.0 and UMP MIDI 2.0)
     const AURenderEvent* event = realtimeEventListHead;
     while (event != nullptr) {
         if (event->head.eventType == AURenderEventMIDI) {
@@ -120,23 +126,18 @@ void Engine::handleMIDI1(
     uint8_t channel = status & 0x0F;
 
     if (msgType == 0x90 && data2 > 0) {
-        // Note On
         handleNoteOn(channel, data1, data2, offset, midiOutputBlock, baseTime);
     } else if (msgType == 0x80 || (msgType == 0x90 && data2 == 0)) {
-        // Note Off
         handleNoteOff(channel, data1, offset, midiOutputBlock, baseTime);
     } else if (msgType == 0xB0) {
-        // Control Change
-        if (data1 == 123 || data1 == 120) { // All Notes Off / All Sound Off
+        if (data1 == 123 || data1 == 120) {
             allNotesOff(midiOutputBlock, baseTime);
         } else {
-            // Pass through other CCs (sustain pedal, mod wheel, pitch bend)
             AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? (baseTime + offset) : AUEventSampleTimeImmediate;
             uint8_t bytes[3] = { status, data1, data2 };
             midiOutputBlock(st, 0, 3, bytes);
         }
     } else if (msgType == 0xE0) {
-        // Pitch bend pass-through
         AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? (baseTime + offset) : AUEventSampleTimeImmediate;
         uint8_t bytes[3] = { status, data1, data2 };
         midiOutputBlock(st, 0, 3, bytes);
@@ -160,7 +161,6 @@ void Engine::handleNoteOn(
 
         const StoredChordSlot& slot = mSlots[slotIdx];
         if (slot.count > 0) {
-            // Find or allocate a voice in the pool
             ActiveVoice* targetVoice = nullptr;
             for (size_t i = 0; i < MAX_ACTIVE_VOICES; ++i) {
                 if (!mVoices[i].active) {
@@ -168,7 +168,7 @@ void Engine::handleNoteOn(
                     break;
                 }
             }
-            if (!targetVoice) targetVoice = &mVoices[0]; // Steal oldest if exhausted
+            if (!targetVoice) targetVoice = &mVoices[0];
 
             targetVoice->triggerKey = note;
             targetVoice->channel = channel;
@@ -190,14 +190,34 @@ void Engine::handleNoteOn(
         }
     }
 
-    // 2. Otherwise: Performance Melody Harmonizer (Top-Note Mode)
-    if (mLiveHarmonizerEnabled.load(std::memory_order_relaxed) && mActiveVoicingCount > 0) {
+    // 2. Performance Melody Harmonizer with SURPRISE MODE
+    if (mLiveHarmonizerEnabled.load(std::memory_order_relaxed)) {
         mLastTriggeredMelodyNote.store((int)note, std::memory_order_relaxed);
 
-        // Calculate semitone shift so the highest chord note aligns with the melody note
-        uint8_t referenceTop = mActiveVoicingNotes[mActiveVoicingCount - 1];
-        int delta = (int)note - (int)referenceTop;
+        uint8_t targetFamily = mSelectedFamily.load(std::memory_order_relaxed);
 
+        // Filter matching recipes by selected family
+        uint16_t matchingIndices[NUM_RECIPES];
+        uint16_t matchingCount = 0;
+
+        for (size_t r = 0; r < NUM_RECIPES; ++r) {
+            if (targetFamily == 0 || ALL_RECIPES[r].family == targetFamily) {
+                matchingIndices[matchingCount++] = (uint16_t)r;
+            }
+        }
+
+        // Fallback to all recipes if none match family
+        if (matchingCount == 0) {
+            for (size_t r = 0; r < NUM_RECIPES; ++r) {
+                matchingIndices[matchingCount++] = (uint16_t)r;
+            }
+        }
+
+        // Pick a random recipe for this melody note (Surprise Me!)
+        uint16_t chosenRecipeIndex = matchingIndices[fastRand() % matchingCount];
+        const Recipe& recipe = ALL_RECIPES[chosenRecipeIndex];
+
+        // Allocate voice
         ActiveVoice* targetVoice = nullptr;
         for (size_t i = 0; i < MAX_ACTIVE_VOICES; ++i) {
             if (!mVoices[i].active) {
@@ -209,24 +229,44 @@ void Engine::handleNoteOn(
 
         targetVoice->triggerKey = note;
         targetVoice->channel = channel;
-        targetVoice->noteCount = mActiveVoicingCount;
         targetVoice->active = true;
 
         int octOffset = mOctaveOffset.load(std::memory_order_relaxed);
+        bool addBass = mAddBassEnabled.load(std::memory_order_relaxed);
         AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? (baseTime + offset) : AUEventSampleTimeImmediate;
 
-        for (uint8_t n = 0; n < mActiveVoicingCount; ++n) {
-            int outNote = (int)mActiveVoicingNotes[n] + delta + octOffset;
+        uint8_t voiceCount = 0;
+
+        // Sound chord notes
+        for (uint8_t n = 0; n < recipe.noteCount; ++n) {
+            int outNote = (int)note + recipe.noteOffsets[n] + octOffset;
             outNote = std::clamp(outNote, 0, 127);
-            targetVoice->soundingNotes[n] = (uint8_t)outNote;
+            targetVoice->soundingNotes[voiceCount++] = (uint8_t)outNote;
 
             uint8_t noteOnBytes[3] = { (uint8_t)(0x90 | (channel & 0x0F)), (uint8_t)outNote, velocity };
             midiOutputBlock(st, 0, 3, noteOnBytes);
         }
+
+        // Sound bass note if enabled
+        if (addBass && voiceCount < MAX_CHORD_NOTES) {
+            int bassNote = (int)note + recipe.bassOffset + octOffset;
+            bassNote = std::clamp(bassNote, 0, 127);
+            targetVoice->soundingNotes[voiceCount++] = (uint8_t)bassNote;
+
+            uint8_t bassBytes[3] = { (uint8_t)(0x90 | (channel & 0x0F)), (uint8_t)bassNote, velocity };
+            midiOutputBlock(st, 0, 3, bassBytes);
+        }
+
+        targetVoice->noteCount = voiceCount;
+
+        // Notify UI of the live surprise chord
+        mLastVoicedRecipeIndex.store((int)chosenRecipeIndex, std::memory_order_relaxed);
+        mLastVoicedMelodyNote.store((int)note, std::memory_order_relaxed);
+
         return;
     }
 
-    // 3. Fallback: Pure Pass-Through
+    // 3. Fallback: Pass-Through
     AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? (baseTime + offset) : AUEventSampleTimeImmediate;
     uint8_t bytes[3] = { (uint8_t)(0x90 | (channel & 0x0F)), note, velocity };
     midiOutputBlock(st, 0, 3, bytes);
@@ -242,7 +282,7 @@ void Engine::handleNoteOff(
     AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? (baseTime + offset) : AUEventSampleTimeImmediate;
     bool foundVoice = false;
 
-    // Check if this key triggered chord voices in mVoices
+    // Turn off all sounding notes that were triggered by this key
     for (size_t i = 0; i < MAX_ACTIVE_VOICES; ++i) {
         if (mVoices[i].active && mVoices[i].triggerKey == note && mVoices[i].channel == channel) {
             foundVoice = true;
@@ -256,7 +296,6 @@ void Engine::handleNoteOff(
     }
 
     if (!foundVoice) {
-        // Normal note-off pass-through
         uint8_t bytes[3] = { (uint8_t)(0x80 | (channel & 0x0F)), note, 0 };
         midiOutputBlock(st, 0, 3, bytes);
     }

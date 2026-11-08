@@ -115,6 +115,12 @@
     }
 }
 
+- (void)setSelectedFamily:(uint8_t)familyCode {
+    if (_engine) {
+        _engine->setSelectedFamily(familyCode);
+    }
+}
+
 - (void)setAddBassEnabled:(BOOL)enabled {
     if (_engine) {
         _engine->setAddBassEnabled(enabled);
@@ -151,6 +157,18 @@
     if (_engine) {
         _engine->clearLastTriggeredMelodyNote();
     }
+}
+
+- (NSInteger)getLastVoicedRecipeIndex {
+    return _engine ? _engine->getLastVoicedRecipeIndex() : -1;
+}
+
+- (NSInteger)getLastVoicedMelodyNote {
+    return _engine ? _engine->getLastVoicedMelodyNote() : -1;
+}
+
+- (void)clearLastVoicedInfo {
+    // optional reset if needed
 }
 
 - (void)triggerAuditionNotes:(const uint8_t *)notes count:(uint8_t)count {

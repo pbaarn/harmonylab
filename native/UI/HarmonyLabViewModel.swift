@@ -22,7 +22,10 @@ public class HarmonyLabViewModel: ObservableObject {
         didSet { refreshMatchingVoicings() }
     }
     @Published public var selectedFamily: ChordFamily = .all {
-        didSet { refreshMatchingVoicings() }
+        didSet {
+            audioUnit?.setSelectedFamily(HarmonyLabViewModel.familyCode(for: selectedFamily))
+            refreshMatchingVoicings()
+        }
     }
     @Published public var searchQuery: String = "" {
         didSet { filterVoicings() }
@@ -63,6 +66,21 @@ public class HarmonyLabViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var pollTimer: Timer?
     private var allFilteredVoicings: [NativeVoicing] = []
+    private var lastRecordedVoicedRecipe: Int = -1
+    private var lastRecordedMelodyNote: Int = -1
+
+    public static func familyCode(for family: ChordFamily) -> UInt8 {
+        switch family {
+        case .all: return 0
+        case .major: return 1
+        case .minor: return 2
+        case .dominant: return 3
+        case .altered: return 4
+        case .halfDiminished: return 5
+        case .diminished: return 6
+        case .suspended: return 7
+        }
+    }
 
     public init(audioUnit: HarmonyLabAudioUnit? = nil) {
         self.audioUnit = audioUnit
@@ -106,6 +124,34 @@ public class HarmonyLabViewModel: ObservableObject {
                         if self.lastTriggeredMelodyNote == melody {
                             self.lastTriggeredMelodyNote = nil
                         }
+                    }
+                }
+            }
+
+            // Real-time synchronization of Live Surprise Chord into UI
+            let recipeIdx = au.getLastVoicedRecipeIndex()
+            let voicedMelody = au.getLastVoicedMelodyNote()
+
+            if recipeIdx >= 0 && voicedMelody >= 0 {
+                if self.lastRecordedVoicedRecipe != recipeIdx || self.lastRecordedMelodyNote != voicedMelody {
+                    self.lastRecordedVoicedRecipe = recipeIdx
+                    self.lastRecordedMelodyNote = voicedMelody
+
+                    let melodyPc = VoicingsEngine.sharpNames[voicedMelody % 12]
+                    let melodyOct = (voicedMelody / 12) - 1
+
+                    if self.selectedPitchClass != melodyPc || self.selectedOctave != melodyOct {
+                        self.selectedPitchClass = melodyPc
+                        self.selectedOctave = melodyOct
+                    }
+
+                    let matching = VoicingsEngine.shared.getVoicings(
+                        topPitchClass: melodyPc,
+                        topOctave: melodyOct,
+                        family: self.selectedFamily
+                    )
+                    if let first = matching.first {
+                        self.activeVoicing = first
                     }
                 }
             }
@@ -191,6 +237,7 @@ public class HarmonyLabViewModel: ObservableObject {
     public func syncAllToAudioUnit() {
         guard let au = audioUnit else { return }
         au.setLiveHarmonizerEnabled(liveHarmonizerEnabled)
+        au.setSelectedFamily(HarmonyLabViewModel.familyCode(for: selectedFamily))
         au.setAddBassEnabled(addBass)
         au.setOctaveOffset(octaveOffset * 12)
         au.setTriggerBaseNote(triggerBaseNote)

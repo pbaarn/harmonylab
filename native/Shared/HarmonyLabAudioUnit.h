@@ -10,15 +10,20 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)clearSlot:(NSInteger)slotIndex;
 - (void)setActiveVoicingNotes:(const uint8_t *)notes count:(uint8_t)count;
 - (void)setLiveHarmonizerEnabled:(BOOL)enabled;
+- (void)setSelectedFamily:(uint8_t)familyCode;
 - (void)setAddBassEnabled:(BOOL)enabled;
 - (void)setOctaveOffset:(NSInteger)offset;
 - (void)setTriggerBaseNote:(uint8_t)baseNote;
 
-// Polling triggers from UI
+// Polling triggers & live voiced surprise chord from UI
 - (NSInteger)getLastTriggeredSlot;
 - (void)clearLastTriggeredSlot;
 - (NSInteger)getLastTriggeredMelodyNote;
 - (void)clearLastTriggeredMelodyNote;
+
+- (NSInteger)getLastVoicedRecipeIndex;
+- (NSInteger)getLastVoicedMelodyNote;
+- (void)clearLastVoicedInfo;
 
 // Audition triggering from UI buttons
 - (void)triggerAuditionNotes:(const uint8_t *)notes count:(uint8_t)count;
