@@ -262,6 +262,7 @@ void Engine::handleNoteOn(
         // Notify UI of the live surprise chord
         mLastVoicedRecipeIndex.store((int)chosenRecipeIndex, std::memory_order_relaxed);
         mLastVoicedMelodyNote.store((int)note, std::memory_order_relaxed);
+        mVoicedEventCounter.fetch_add(1, std::memory_order_relaxed);
 
         return;
     }

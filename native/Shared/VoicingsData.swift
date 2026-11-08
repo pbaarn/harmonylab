@@ -901,4 +901,55 @@ public class VoicingsEngine {
 
         return results
     }
+
+    public func voicingForRecipe(index: Int, targetTopMidi: UInt8) -> NativeVoicing? {
+        guard index >= 0 && index < VoicingsEngine.seedVoicings.count else { return nil }
+        let seed = VoicingsEngine.seedVoicings[index]
+        let origTopMidi = VoicingsEngine.noteNameToMidi(seed.topNote)
+        let semitoneDelta = Int(targetTopMidi) - Int(origTopMidi)
+
+        var transposedNotes: [UInt8] = []
+        for note in seed.midiNotes {
+            let shifted = Int(note) + semitoneDelta
+            if shifted >= 0 && shifted <= 127 {
+                transposedNotes.append(UInt8(shifted))
+            }
+        }
+        guard transposedNotes.count == seed.midiNotes.count else { return nil }
+
+        let origRootMidi = VoicingsEngine.noteNameToMidi("\(seed.root)4")
+        let newRootMidi = UInt8(clamping: Int(origRootMidi) + semitoneDelta)
+        let newRootName = VoicingsEngine.sharpNames[Int(newRootMidi) % 12]
+
+        var newSymbol = seed.chordSymbol
+        if seed.chordSymbol.hasPrefix(seed.root) {
+            newSymbol = newRootName + seed.chordSymbol.dropFirst(seed.root.count)
+        }
+
+        var newBassMidi: UInt8? = nil
+        if let bass = seed.bassNoteMidi {
+            let shiftedBass = Int(bass) + semitoneDelta
+            if shiftedBass >= 0 && shiftedBass <= 127 {
+                newBassMidi = UInt8(shiftedBass)
+            }
+        }
+
+        let melodyPc = VoicingsEngine.sharpNames[Int(targetTopMidi) % 12]
+        let melodyOct = (Int(targetTopMidi) / 12) - 1
+
+        return NativeVoicing(
+            id: "\(seed.id)-t\(targetTopMidi)",
+            chordSymbol: newSymbol,
+            name: seed.name,
+            root: newRootName,
+            family: seed.family,
+            topNote: "\(melodyPc)\(melodyOct)",
+            topPitchClass: melodyPc,
+            midiNotes: transposedNotes,
+            recipe: seed.recipe,
+            styleTags: seed.styleTags,
+            descriptionText: seed.descriptionText,
+            bassNoteMidi: newBassMidi
+        )
+    }
 }

@@ -64,6 +64,7 @@ public:
 
     int getLastVoicedRecipeIndex() const { return mLastVoicedRecipeIndex.load(std::memory_order_relaxed); }
     int getLastVoicedMelodyNote() const { return mLastVoicedMelodyNote.load(std::memory_order_relaxed); }
+    uint32_t getVoicedEventCounter() const { return mVoicedEventCounter.load(std::memory_order_relaxed); }
 
     // Manual chord audition trigger from UI
     void triggerAuditionChord(const uint8_t* notes, uint8_t count, AUMIDIOutputEventBlock midiOutputBlock);
@@ -109,6 +110,7 @@ private:
     // Live surprise reporting to UI
     std::atomic<int> mLastVoicedRecipeIndex{-1};
     std::atomic<int> mLastVoicedMelodyNote{-1};
+    std::atomic<uint32_t> mVoicedEventCounter{0};
 
     // Audition voice tracking
     ActiveVoice mAuditionVoice;

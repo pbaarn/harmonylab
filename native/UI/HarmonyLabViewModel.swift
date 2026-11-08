@@ -66,8 +66,7 @@ public class HarmonyLabViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var pollTimer: Timer?
     private var allFilteredVoicings: [NativeVoicing] = []
-    private var lastRecordedVoicedRecipe: Int = -1
-    private var lastRecordedMelodyNote: Int = -1
+    private var lastRecordedEventCounter: UInt32 = 0
 
     public static func familyCode(for family: ChordFamily) -> UInt8 {
         switch family {
@@ -128,30 +127,27 @@ public class HarmonyLabViewModel: ObservableObject {
                 }
             }
 
-            // Real-time synchronization of Live Surprise Chord into UI
-            let recipeIdx = au.getLastVoicedRecipeIndex()
-            let voicedMelody = au.getLastVoicedMelodyNote()
+            // Real-time synchronization of Live Surprise Chord on EVERY key press
+            let currentEventCounter = au.getVoicedEventCounter()
+            if self.lastRecordedEventCounter != currentEventCounter {
+                self.lastRecordedEventCounter = currentEventCounter
 
-            if recipeIdx >= 0 && voicedMelody >= 0 {
-                if self.lastRecordedVoicedRecipe != recipeIdx || self.lastRecordedMelodyNote != voicedMelody {
-                    self.lastRecordedVoicedRecipe = recipeIdx
-                    self.lastRecordedMelodyNote = voicedMelody
+                let recipeIdx = Int(au.getLastVoicedRecipeIndex())
+                let voicedMelody = au.getLastVoicedMelodyNote()
 
-                    let melodyPc = VoicingsEngine.sharpNames[voicedMelody % 12]
-                    let melodyOct = (voicedMelody / 12) - 1
+                if recipeIdx >= 0 && voicedMelody >= 0 && voicedMelody <= 127 {
+                    let targetTopMidi = UInt8(voicedMelody)
+                    if let exactChord = VoicingsEngine.shared.voicingForRecipe(index: recipeIdx, targetTopMidi: targetTopMidi) {
+                        let melodyPc = VoicingsEngine.sharpNames[Int(targetTopMidi) % 12]
+                        let melodyOct = (Int(targetTopMidi) / 12) - 1
 
-                    if self.selectedPitchClass != melodyPc || self.selectedOctave != melodyOct {
-                        self.selectedPitchClass = melodyPc
-                        self.selectedOctave = melodyOct
-                    }
+                        if self.selectedPitchClass != melodyPc || self.selectedOctave != melodyOct {
+                            self.selectedPitchClass = melodyPc
+                            self.selectedOctave = melodyOct
+                        }
 
-                    let matching = VoicingsEngine.shared.getVoicings(
-                        topPitchClass: melodyPc,
-                        topOctave: melodyOct,
-                        family: self.selectedFamily
-                    )
-                    if let first = matching.first {
-                        self.activeVoicing = first
+                        // Immediately update the displayed active voicing on this exact key press
+                        self.activeVoicing = exactChord
                     }
                 }
             }

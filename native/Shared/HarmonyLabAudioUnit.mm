@@ -167,6 +167,10 @@
     return _engine ? _engine->getLastVoicedMelodyNote() : -1;
 }
 
+- (uint32_t)getVoicedEventCounter {
+    return _engine ? _engine->getVoicedEventCounter() : 0;
+}
+
 - (void)clearLastVoicedInfo {
     // optional reset if needed
 }

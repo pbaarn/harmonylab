@@ -23,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSInteger)getLastVoicedRecipeIndex;
 - (NSInteger)getLastVoicedMelodyNote;
+- (uint32_t)getVoicedEventCounter;
 - (void)clearLastVoicedInfo;
 
 // Audition triggering from UI buttons
