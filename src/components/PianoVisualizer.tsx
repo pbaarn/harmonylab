@@ -452,6 +452,9 @@ export const PianoVisualizer: React.FC<PianoVisualizerProps> = ({
                   <>
                     <Plus className="w-4 h-4 text-white" />
                     <span>ADD CHORD TO PROGRESSION ({activeVoicing.chordSymbol})</span>
+                    <kbd className="ml-1 px-1.5 py-0.5 rounded bg-black/25 text-white text-[10px] font-mono">
+                      Space
+                    </kbd>
                   </>
                 )}
               </button>

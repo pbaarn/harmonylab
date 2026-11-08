@@ -2,13 +2,15 @@
 
 import React, { useState } from 'react';
 import { audioEngine } from '@/lib/audio';
-import { Volume2, VolumeX, Sparkles, BookOpen, Layers, Disc3 } from 'lucide-react';
+import { Volume2, VolumeX, Sparkles, BookOpen, Layers, Disc3, Keyboard } from 'lucide-react';
 import { TimelineBlock, PitchClass } from '@/types/harmonylab';
 import { SEED_VOICINGS } from '@/lib/voicingsDatabase';
 
 interface NavbarProps {
   onLoadPreset: (blocks: TimelineBlock[]) => void;
   onOpenPrintModal: () => void;
+  isKeyboardOverlayOpen?: boolean;
+  onToggleKeyboardOverlay?: () => void;
 }
 
 export const PRESET_PROGRESSIONS = [
@@ -34,7 +36,12 @@ export const PRESET_PROGRESSIONS = [
   },
 ];
 
-export const Navbar: React.FC<NavbarProps> = ({ onLoadPreset, onOpenPrintModal }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  onLoadPreset,
+  onOpenPrintModal,
+  isKeyboardOverlayOpen,
+  onToggleKeyboardOverlay,
+}) => {
   const [isMuted, setIsMuted] = useState(false);
 
   const toggleMute = () => {
@@ -87,7 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onLoadPreset, onOpenPrintModal }
         </div>
 
         {/* Center / Right controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {/* Preset Selector */}
           <div className="hidden md:flex items-center gap-1.5 bg-warm-100/80 px-2.5 py-1.5 rounded-lg border border-warm-200 text-xs">
             <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
@@ -104,6 +111,31 @@ export const Navbar: React.FC<NavbarProps> = ({ onLoadPreset, onOpenPrintModal }
               ))}
             </select>
           </div>
+
+          {/* Toggle On-Screen Keyboard Overlay */}
+          {onToggleKeyboardOverlay && (
+            <button
+              type="button"
+              onClick={onToggleKeyboardOverlay}
+              className={`
+                inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all
+                ${
+                  isKeyboardOverlayOpen
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-slate-800'
+                    : 'bg-warm-50 hover:bg-white text-slate-700 border-warm-300'
+                }
+              `}
+              title="Toggle On-Screen Keyboard Overlay (Shortcut: \\)"
+            >
+              <Keyboard className="w-4 h-4 text-blue-500" />
+              <span className="hidden sm:inline">Keyboard Overlay</span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isKeyboardOverlayOpen ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'
+                }`}
+              />
+            </button>
+          )}
 
           {/* Audio Mute Button */}
           <button

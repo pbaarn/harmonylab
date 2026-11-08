@@ -22,6 +22,7 @@ import {
   Play,
   LayoutList,
   LayoutGrid,
+  Keyboard,
 } from 'lucide-react';
 
 interface TopNoteReharmonizerProps {
@@ -32,6 +33,18 @@ interface TopNoteReharmonizerProps {
   onToggleAddBass: () => void;
   octaveOffset: number;
   onSetOctaveOffset: (offset: number) => void;
+  // Controlled props for sync with keyboard overlay & global shortcuts
+  selectedPitchClass?: PitchClass;
+  onSelectPitchClass?: (pc: PitchClass) => void;
+  selectedOctave?: number;
+  onSelectOctave?: (oct: number) => void;
+  selectedFamily?: ChordFamily | 'All';
+  onSelectFamily?: (family: ChordFamily | 'All') => void;
+  isKeyboardOverlayOpen?: boolean;
+  onToggleKeyboardOverlay?: () => void;
+  onTriggerSurprise?: (pc?: PitchClass, oct?: number) => void;
+  recentSurprises?: Voicing[];
+  onClearRecentSurprises?: () => void;
 }
 
 const FAMILIES: (ChordFamily | 'All')[] = [
@@ -45,6 +58,21 @@ const FAMILIES: (ChordFamily | 'All')[] = [
   'Suspended',
 ];
 
+export const PITCH_CLASS_SHORTCUTS: Record<PitchClass, string> = {
+  C: 'A',
+  'C#': 'W',
+  D: 'S',
+  Eb: 'E',
+  E: 'D',
+  F: 'F',
+  'F#': 'T',
+  G: 'G',
+  Ab: 'Y',
+  A: 'H',
+  Bb: 'U',
+  B: 'J',
+};
+
 export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
   selectedVoicing,
   onSelectVoicing,
@@ -53,28 +81,52 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
   onToggleAddBass,
   octaveOffset,
   onSetOctaveOffset,
+  selectedPitchClass: propPitchClass,
+  onSelectPitchClass,
+  selectedOctave: propOctave,
+  onSelectOctave,
+  selectedFamily: propFamily,
+  onSelectFamily,
+  isKeyboardOverlayOpen,
+  onToggleKeyboardOverlay,
+  onTriggerSurprise,
+  recentSurprises: propRecentSurprises,
+  onClearRecentSurprises,
 }) => {
-  const [selectedPitchClass, setSelectedPitchClass] = useState<PitchClass>('E');
-  const [selectedOctave, setSelectedOctave] = useState<number>(5);
-  const [selectedFamily, setSelectedFamily] = useState<ChordFamily | 'All'>('All');
+  const [internalPitchClass, setInternalPitchClass] = useState<PitchClass>('E');
+  const [internalOctave, setInternalOctave] = useState<number>(5);
+  const [internalFamily, setInternalFamily] = useState<ChordFamily | 'All'>('All');
+  const [internalRecentSurprises, setInternalRecentSurprises] = useState<Voicing[]>([]);
+
+  const selectedPitchClass = propPitchClass ?? internalPitchClass;
+  const setSelectedPitchClass = onSelectPitchClass ?? setInternalPitchClass;
+
+  const selectedOctave = propOctave ?? internalOctave;
+  const setSelectedOctave = onSelectOctave ?? setInternalOctave;
+
+  const selectedFamily = propFamily ?? internalFamily;
+  const setSelectedFamily = onSelectFamily ?? setInternalFamily;
+
+  const recentSurprises = propRecentSurprises ?? internalRecentSurprises;
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSurprising, setIsSurprising] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
-  const [recentSurprises, setRecentSurprises] = useState<Voicing[]>([]);
   const [viewMode, setViewMode] = useState<'column' | 'grid'>('column');
 
-  // Load recent surprises from localStorage on mount
+  // Load recent surprises from localStorage on mount if not controlled
   useEffect(() => {
+    if (propRecentSurprises !== undefined) return;
     try {
       const saved = localStorage.getItem('harmonylab_recent_surprises');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          setRecentSurprises(parsed.slice(0, 6));
+          setInternalRecentSurprises(parsed.slice(0, 6));
         }
       }
     } catch (e) {}
-  }, []);
+  }, [propRecentSurprises]);
 
   // Available matching voicings for current top note
   const matchingVoicings = useMemo(() => {
@@ -95,18 +147,29 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
   }, [selectedPitchClass, selectedOctave, selectedFamily, searchQuery]);
 
   // "Surprise Me" Action: pick random voicing for this top note & play it
-  const handleSurpriseMe = () => {
-    if (matchingVoicings.length === 0) return;
-    setIsSurprising(true);
+  const handleSurpriseMe = (overridePitchClass?: PitchClass, overrideOctave?: number) => {
+    if (onTriggerSurprise) {
+      onTriggerSurprise(overridePitchClass, overrideOctave);
+      setIsSurprising(true);
+      setTimeout(() => setIsSurprising(false), 300);
+      return;
+    }
 
-    const randomIndex = Math.floor(Math.random() * matchingVoicings.length);
-    const surpriseChoice = matchingVoicings[randomIndex];
+    const pc = overridePitchClass || selectedPitchClass;
+    const oct = overrideOctave || selectedOctave;
+    const list = getVoicingsForTopNote(pc, oct, selectedFamily);
+    const voicingsToPick = list.length > 0 ? list : getVoicingsForTopNote(pc, oct, 'All');
+    if (voicingsToPick.length === 0) return;
+
+    setIsSurprising(true);
+    const randomIndex = Math.floor(Math.random() * voicingsToPick.length);
+    const surpriseChoice = voicingsToPick[randomIndex];
 
     onSelectVoicing(surpriseChoice);
     audioEngine.playVoicing(surpriseChoice, { addBass, octaveOffset });
 
     // Track the last 6 chords played by the surprise button
-    setRecentSurprises((prev) => {
+    setInternalRecentSurprises((prev) => {
       const filtered = prev.filter((v) => v.id !== surpriseChoice.id);
       const updated = [surpriseChoice, ...filtered].slice(0, 6);
       try {
@@ -118,6 +181,13 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
     setTimeout(() => {
       setIsSurprising(false);
     }, 400);
+  };
+
+  const handleAddToProgression = () => {
+    if (!selectedVoicing) return;
+    onAddToTimeline(selectedVoicing);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 1200);
   };
 
   const handlePlayVoicing = (e: React.MouseEvent, voicing: Voicing) => {
@@ -140,13 +210,13 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
             </h3>
           </div>
 
-          {/* Surprise Me & Quick Add */}
-          <div className="flex items-center gap-1.5">
+          {/* Action Buttons: Surprise Me, Add to Progression, Toggle Keyboard */}
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
             <button
               type="button"
-              onClick={handleSurpriseMe}
+              onClick={() => handleSurpriseMe()}
               className={`
-                inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white shadow-2xs transition-all
+                inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white shadow-2xs transition-all
                 ${isSurprising ? 'scale-95 bg-blue-700' : 'bg-blue-600 hover:bg-blue-700 active:scale-95'}
               `}
               title="Surprise me with a random voicing under this melody note"
@@ -154,32 +224,102 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
               <Sparkles className="w-3.5 h-3.5" />
               <span>Surprise Me</span>
             </button>
+
+            {/* Add Last Played Chord to Progression */}
+            <button
+              type="button"
+              onClick={handleAddToProgression}
+              disabled={!selectedVoicing}
+              className={`
+                inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-2xs transition-all
+                ${
+                  justAdded
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white disabled:opacity-40'
+                }
+              `}
+              title="Add current chord to progression (Keyboard Shortcut: Space or Enter)"
+            >
+              {justAdded ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Added!</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Chord</span>
+                  <kbd className="hidden sm:inline-block ml-0.5 px-1 py-0.2 bg-black/20 rounded text-[9px] font-mono">
+                    Space
+                  </kbd>
+                </>
+              )}
+            </button>
+
+            {/* Toggle On-Screen Keyboard Overlay */}
+            {onToggleKeyboardOverlay && (
+              <button
+                type="button"
+                onClick={onToggleKeyboardOverlay}
+                className={`
+                  inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all
+                  ${
+                    isKeyboardOverlayOpen
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-2xs ring-1 ring-slate-700'
+                      : 'bg-warm-100 hover:bg-warm-200 text-slate-700 border-warm-300'
+                  }
+                `}
+                title="Toggle On-Screen Keyboard Overlay for mouse or touch (Shortcut: \\)"
+              >
+                <Keyboard className="w-3.5 h-3.5 text-blue-500" />
+                <span className="hidden sm:inline">Keys</span>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isKeyboardOverlayOpen ? 'bg-emerald-400' : 'bg-slate-400'
+                  }`}
+                />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Melody Pitch Class Selector Grid */}
+        {/* Melody Pitch Class Selector Grid with Computer Keyboard Badges */}
         <div className="mt-3">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-            01 • Melody Soprano Pitch:
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              01 • Melody Soprano Pitch:
+            </label>
+            <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">
+              Keys: [A-J] play & surprise
+            </span>
+          </div>
           <div className="grid grid-cols-6 gap-1">
             {PITCH_CLASSES.map((pc) => {
               const isSelected = selectedPitchClass === pc;
+              const shortcutKey = PITCH_CLASS_SHORTCUTS[pc];
               return (
                 <button
                   key={pc}
                   type="button"
                   onClick={() => setSelectedPitchClass(pc)}
                   className={`
-                    py-1.5 text-center rounded-lg text-xs font-bold transition-all
+                    py-1.5 px-1 text-center rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1
                     ${
                       isSelected
                         ? 'bg-blue-600 text-white shadow-2xs ring-1 ring-blue-300'
                         : 'bg-warm-100 hover:bg-warm-200 text-slate-800 border border-warm-200'
                     }
                   `}
+                  title={`Select ${pc} (Press key [${shortcutKey}] on keyboard to surprise)`}
                 >
-                  {pc}
+                  <span>{pc}</span>
+                  <span
+                    className={`text-[9px] font-mono font-normal opacity-60 ${
+                      isSelected ? 'text-blue-100' : 'text-slate-500'
+                    }`}
+                  >
+                    [{shortcutKey}]
+                  </span>
                 </button>
               );
             })}
@@ -262,10 +402,14 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setRecentSurprises([]);
-                  try {
-                    localStorage.removeItem('harmonylab_recent_surprises');
-                  } catch (e) {}
+                  if (onClearRecentSurprises) {
+                    onClearRecentSurprises();
+                  } else {
+                    setInternalRecentSurprises([]);
+                    try {
+                      localStorage.removeItem('harmonylab_recent_surprises');
+                    } catch (e) {}
+                  }
                 }}
                 className="text-[9px] text-slate-400 hover:text-rose-600 transition"
               >
