@@ -35,3 +35,6 @@ next-env.d.ts
 # midi exports cache (keep folder, ignore files)
 /midi_exports/*
 !/midi_exports/.gitkeep
+
+# native AUv3 build output
+native/build/
