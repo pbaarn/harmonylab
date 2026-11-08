@@ -193,11 +193,8 @@ export default function Home() {
         return;
       }
 
-      // 1. Add Last Played Chord to Progression: Space, Enter, +
-      if (e.code === 'Space' || e.code === 'Enter' || e.key === '+' || e.key === '=') {
-        if (e.code === 'Space') {
-          e.preventDefault(); // Prevent page scroll down
-        }
+      // 1. Add Last Played Chord to Progression: Plus sign (+, =, NumpadAdd)
+      if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd' || e.code === 'Equal') {
         if (activeVoicing) {
           handleAddToTimeline(activeVoicing);
         } else {
@@ -305,14 +302,14 @@ export default function Home() {
               HarmonyLab
             </h1>
             <p className="text-xs text-slate-600 mt-0.5 max-w-2xl leading-relaxed">
-              Top-note piano voicings & reharmonizer. Press computer keys <kbd className="px-1 py-0.2 bg-warm-200 rounded font-mono text-[10px]">A–K</kbd> to surprise top notes, and press <kbd className="px-1 py-0.2 bg-warm-200 rounded font-mono text-[10px]">Space</kbd> to add chords to your progression.
+              Top-note piano voicings & reharmonizer. Press computer keys <kbd className="px-1 py-0.2 bg-warm-200 rounded font-mono text-[10px]">A–K</kbd> to surprise top notes, <kbd className="px-1 py-0.2 bg-warm-200 rounded font-mono text-[10px]">+</kbd> to add chords, and <kbd className="px-1 py-0.2 bg-warm-200 rounded font-mono text-[10px]">Space</kbd> to play/stop progression.
             </p>
           </div>
 
           <div className="flex items-center gap-2 self-stretch md:self-auto bg-white border border-warm-200 rounded-xl px-3 py-1.5 text-xs text-slate-600 shadow-2xs">
             <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span>
-              Audition shortcuts: <strong className="text-slate-900 font-mono">[A-K]</strong> Surprise • <strong className="text-slate-900 font-mono">[Space]</strong> Add • <strong className="text-slate-900 font-mono">[\]</strong> Overlay
+              Shortcuts: <strong className="text-slate-900 font-mono">[A-K]</strong> Surprise • <strong className="text-slate-900 font-mono">[+]</strong> Add Chord • <strong className="text-slate-900 font-mono">[Space]</strong> Play/Stop • <strong className="text-slate-900 font-mono">[\]</strong> Overlay
             </span>
           </div>
         </div>

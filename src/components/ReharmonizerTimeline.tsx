@@ -164,6 +164,28 @@ export const ReharmonizerTimeline: React.FC<ReharmonizerTimelineProps> = ({
     }
   };
 
+  // Spacebar global keyboard shortcut to start and stop timeline playback
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Do not intercept if user is typing in an input or textarea
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault(); // Prevent browser scrolling
+        togglePlay();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPlaying, blocks, bpm, isLooping, activePlayIndex, addBass, octaveOffset]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -347,9 +369,10 @@ export const ReharmonizerTimeline: React.FC<ReharmonizerTimelineProps> = ({
             type="button"
             onClick={togglePlay}
             className={`
-              inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-white shadow-sm transition-all
+              inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-white shadow-sm transition-all
               ${isPlaying ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700 active:scale-95'}
             `}
+            title="Toggle Timeline Playback (Shortcut: Space)"
           >
             {isPlaying ? (
               <>
@@ -362,6 +385,9 @@ export const ReharmonizerTimeline: React.FC<ReharmonizerTimelineProps> = ({
                 <span>Play Timeline</span>
               </>
             )}
+            <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 bg-black/25 rounded text-[10px] font-mono leading-none">
+              Space
+            </kbd>
           </button>
 
           {/* Logic Pro & Export Suite */}

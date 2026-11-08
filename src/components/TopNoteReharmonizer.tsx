@@ -238,7 +238,7 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
                     : 'bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white disabled:opacity-40'
                 }
               `}
-              title="Add current chord to progression (Keyboard Shortcut: Space or Enter)"
+              title="Add current chord to progression (Keyboard Shortcut: +)"
             >
               {justAdded ? (
                 <>
@@ -250,7 +250,7 @@ export const TopNoteReharmonizer: React.FC<TopNoteReharmonizerProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Chord</span>
                   <kbd className="hidden sm:inline-block ml-0.5 px-1 py-0.2 bg-black/20 rounded text-[9px] font-mono">
-                    Space
+                    +
                   </kbd>
                 </>
               )}

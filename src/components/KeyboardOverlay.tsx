@@ -166,7 +166,7 @@ export const KeyboardOverlay: React.FC<KeyboardOverlayProps> = ({
                     : 'bg-blue-600 hover:bg-blue-500 active:scale-95 text-white disabled:opacity-40'
                 }
               `}
-              title="Add current chord to progression (Shortcut: Space or Enter)"
+              title="Add current chord to progression (Shortcut: +)"
             >
               {justAdded ? (
                 <>
@@ -178,7 +178,7 @@ export const KeyboardOverlay: React.FC<KeyboardOverlayProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Chord</span>
                   <kbd className="hidden sm:inline-block ml-1 px-1 py-0.2 bg-black/30 rounded text-[9px] font-mono">
-                    Space
+                    +
                   </kbd>
                 </>
               )}
@@ -307,7 +307,9 @@ export const KeyboardOverlay: React.FC<KeyboardOverlayProps> = ({
                 <span className="text-amber-400 font-bold">Shortcuts:</span>
                 <span>[A-K] Surprise Voicing for Note</span>
                 <span>•</span>
-                <span>[Space / ↵] Add Chord</span>
+                <span>[+] Add Chord</span>
+                <span>•</span>
+                <span>[Space] Play/Stop</span>
                 <span>•</span>
                 <span>[Z / X] Octave Down/Up</span>
               </div>
