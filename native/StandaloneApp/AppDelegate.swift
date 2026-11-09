@@ -25,7 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let au = try? HarmonyLabAudioUnit(componentDescription: desc, options: [])
         self.audioUnit = au
 
-        // In standalone mode, hook MIDIOutputEventBlock to the SimpleSynth
+        // In standalone mode, hook MIDIOutputEventBlock to ChordPreviewPlayer
         au?.midiOutputEventBlock = { (sampleTime, cable, length, data) in
             guard length >= 3 else { return noErr }
             let bytes = data
@@ -34,9 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let vel = bytes[2]
 
             if status == 0x90 && vel > 0 {
-                SimpleSynth.shared.playNotes([note])
-            } else if status == 0x80 || (status == 0x90 && vel == 0) {
-                SimpleSynth.shared.stopNotes()
+                ChordPreviewPlayer.shared.playSingleNote(note)
             }
             return noErr
         }

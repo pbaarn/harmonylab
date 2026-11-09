@@ -268,15 +268,21 @@ public class HarmonyLabViewModel: ObservableObject {
                 notes.insert(bass, at: 0)
             }
         }
+
+        // 1. Instant audio preview via polyphonic synth engine (works in Standalone & AUv3)
+        ChordPreviewPlayer.shared.playChord(notes)
+
+        // 2. Transmit MIDI notes through AudioUnit (for Logic Pro track instrument)
         audioUnit?.triggerAuditionNotes(notes, count: UInt8(notes.count))
 
-        // Auto release after 700ms
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+        // Auto release MIDI notes after 1.0s
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.audioUnit?.stopAuditionNotes()
         }
     }
 
     public func stopAudition() {
+        ChordPreviewPlayer.shared.stopChord()
         audioUnit?.stopAuditionNotes()
     }
 
