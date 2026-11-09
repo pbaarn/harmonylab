@@ -25,6 +25,7 @@ public class HarmonyLabViewModel: ObservableObject {
         didSet {
             audioUnit?.setSelectedFamily(HarmonyLabViewModel.familyCode(for: selectedFamily))
             refreshMatchingVoicings()
+            saveSettings()
         }
     }
     @Published public var searchQuery: String = "" {
@@ -53,13 +54,20 @@ public class HarmonyLabViewModel: ObservableObject {
         didSet {
             audioUnit?.setAddBassEnabled(addBass)
             syncActiveVoicingToAudioUnit()
+            saveSettings()
         }
     }
     @Published public var octaveOffset: Int = 0 {
-        didSet { audioUnit?.setOctaveOffset(octaveOffset * 12) }
+        didSet {
+            audioUnit?.setOctaveOffset(octaveOffset * 12)
+            saveSettings()
+        }
     }
     @Published public var triggerBaseNote: UInt8 = 36 { // 36 = C2, 24 = C1
-        didSet { audioUnit?.setTriggerBaseNote(triggerBaseNote) }
+        didSet {
+            audioUnit?.setTriggerBaseNote(triggerBaseNote)
+            saveSettings()
+        }
     }
 
     // Real-time visual feedback for active incoming MIDI
@@ -86,6 +94,7 @@ public class HarmonyLabViewModel: ObservableObject {
 
     public init(audioUnit: HarmonyLabAudioUnit? = nil) {
         self.audioUnit = audioUnit
+        loadSettings()
         loadSlots()
         loadHistory()
         refreshMatchingVoicings()
@@ -94,6 +103,9 @@ public class HarmonyLabViewModel: ObservableObject {
         if let first = VoicingsEngine.seedVoicings.first {
             self.activeVoicing = first
         }
+
+        // CRITICAL: Synchronize all loaded slots and parameters to C++ AudioUnit engine!
+        syncAllToAudioUnit()
 
         startPollingAudioUnit()
     }
@@ -110,6 +122,10 @@ public class HarmonyLabViewModel: ObservableObject {
             if slot >= 0 && slot < 10 {
                 if self.lastTriggeredSlot != slot {
                     self.lastTriggeredSlot = slot
+                    // Update activeVoicing and piano visualizer to the chord stored in this slot
+                    if let slotChord = self.chordSlots[slot].chord {
+                        self.activeVoicing = slotChord
+                    }
                     // Auto-clear after 250ms
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                         if self.lastTriggeredSlot == slot {
@@ -141,6 +157,13 @@ public class HarmonyLabViewModel: ObservableObject {
 
                 if recipeIdx >= 0 && voicedMelody >= 0 && voicedMelody <= 127 {
                     let targetTopMidi = UInt8(voicedMelody)
+
+                    // Guard: Ensure slot trigger keys are NEVER treated as melody surprise chords!
+                    let baseTrigger = self.triggerBaseNote
+                    if targetTopMidi >= baseTrigger && targetTopMidi < baseTrigger + 10 {
+                        return
+                    }
+
                     if let exactChord = VoicingsEngine.shared.voicingForRecipe(index: recipeIdx, targetTopMidi: targetTopMidi) {
                         let melodyPc = VoicingsEngine.sharpNames[Int(targetTopMidi) % 12]
                         let melodyOct = (Int(targetTopMidi) / 12) - 1
@@ -343,6 +366,33 @@ public class HarmonyLabViewModel: ObservableObject {
            let decoded = try? JSONDecoder().decode([ChordSlot].self, from: data),
            decoded.count == 10 {
             self.chordSlots = decoded
+            for i in 0..<10 {
+                syncSlotToAudioUnit(i)
+            }
+        }
+    }
+
+    // Settings persistence
+    private func saveSettings() {
+        UserDefaults.standard.set(triggerBaseNote, forKey: "HarmonyLab_TriggerBaseNote_v1")
+        UserDefaults.standard.set(addBass, forKey: "HarmonyLab_AddBass_v1")
+        UserDefaults.standard.set(octaveOffset, forKey: "HarmonyLab_OctaveOffset_v1")
+        UserDefaults.standard.set(selectedFamily.rawValue, forKey: "HarmonyLab_SelectedFamily_v1")
+    }
+
+    private func loadSettings() {
+        if let savedBase = UserDefaults.standard.object(forKey: "HarmonyLab_TriggerBaseNote_v1") as? UInt8 {
+            self.triggerBaseNote = savedBase
+        }
+        if let savedBass = UserDefaults.standard.object(forKey: "HarmonyLab_AddBass_v1") as? Bool {
+            self.addBass = savedBass
+        }
+        if let savedOct = UserDefaults.standard.object(forKey: "HarmonyLab_OctaveOffset_v1") as? Int {
+            self.octaveOffset = savedOct
+        }
+        if let savedFamStr = UserDefaults.standard.string(forKey: "HarmonyLab_SelectedFamily_v1"),
+           let fam = ChordFamily(rawValue: savedFamStr) {
+            self.selectedFamily = fam
         }
     }
 

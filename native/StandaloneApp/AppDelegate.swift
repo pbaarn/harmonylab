@@ -39,10 +39,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return noErr
         }
 
-        let contentView = HarmonyLabRootView(audioUnit: au)
+        let vm = HarmonyLabViewModel(audioUnit: au)
+        let contentView = HarmonyLabRootView(viewModel: vm)
 
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 880, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 880, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false

@@ -186,8 +186,8 @@ void Engine::handleNoteOn(
                 uint8_t noteOnBytes[3] = { (uint8_t)(0x90 | (channel & 0x0F)), (uint8_t)outNote, velocity };
                 midiOutputBlock(st, 0, 3, noteOnBytes);
             }
-            return;
         }
+        return; // Always return: slot trigger keys must NEVER voice as melody notes
     }
 
     // 2. Performance Melody Harmonizer with SURPRISE MODE
@@ -296,7 +296,8 @@ void Engine::handleNoteOff(
         }
     }
 
-    if (!foundVoice) {
+    uint8_t baseTrigger = mTriggerBaseNote.load(std::memory_order_relaxed);
+    if (!foundVoice && !(note >= baseTrigger && note < baseTrigger + NUM_CHORD_SLOTS)) {
         uint8_t bytes[3] = { (uint8_t)(0x80 | (channel & 0x0F)), note, 0 };
         midiOutputBlock(st, 0, 3, bytes);
     }

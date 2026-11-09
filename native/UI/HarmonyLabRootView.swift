@@ -8,10 +8,14 @@
 import SwiftUI
 
 public struct HarmonyLabRootView: View {
-    @StateObject private var viewModel: HarmonyLabViewModel
+    @ObservedObject private var viewModel: HarmonyLabViewModel
+
+    public init(viewModel: HarmonyLabViewModel) {
+        self.viewModel = viewModel
+    }
 
     public init(audioUnit: HarmonyLabAudioUnit? = nil) {
-        _viewModel = StateObject(wrappedValue: HarmonyLabViewModel(audioUnit: audioUnit))
+        self.viewModel = HarmonyLabViewModel(audioUnit: audioUnit)
     }
 
     public var body: some View {

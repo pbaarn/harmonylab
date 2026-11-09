@@ -12,6 +12,7 @@ import AppKit
 @objc(AudioUnitViewController)
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
     private var audioUnit: HarmonyLabAudioUnit?
+    private var viewModel: HarmonyLabViewModel?
     private var hostingView: NSHostingView<HarmonyLabRootView>?
 
     public override func viewDidLoad() {
@@ -20,11 +21,20 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
     }
 
     public override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 530))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 620))
     }
 
     private func setupUI() {
-        let rootView = HarmonyLabRootView(audioUnit: audioUnit)
+        let vm: HarmonyLabViewModel
+        if let existing = self.viewModel {
+            vm = existing
+        } else {
+            let newVm = HarmonyLabViewModel(audioUnit: self.audioUnit)
+            self.viewModel = newVm
+            vm = newVm
+        }
+
+        let rootView = HarmonyLabRootView(viewModel: vm)
         let hosting = NSHostingView(rootView: rootView)
         hosting.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(hosting)
@@ -42,6 +52,10 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
         let au = try HarmonyLabAudioUnit(componentDescription: componentDescription, options: [])
         self.audioUnit = au
+
+        // Pre-create ViewModel to sync all loaded slots & configuration to C++ engine immediately
+        let vm = HarmonyLabViewModel(audioUnit: au)
+        self.viewModel = vm
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
