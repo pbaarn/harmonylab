@@ -39,6 +39,9 @@ public class HarmonyLabViewModel: ObservableObject {
         }
     }
 
+    // History of last 12 chords
+    @Published public var chordHistory: [ChordHistoryItem] = []
+
     // 10 Stored Chord Trigger Slots
     @Published public var chordSlots: [ChordSlot] = (0..<10).map { ChordSlot(id: $0) }
 
@@ -84,6 +87,7 @@ public class HarmonyLabViewModel: ObservableObject {
     public init(audioUnit: HarmonyLabAudioUnit? = nil) {
         self.audioUnit = audioUnit
         loadSlots()
+        loadHistory()
         refreshMatchingVoicings()
 
         // Default to first seed voicing if available
@@ -147,7 +151,15 @@ public class HarmonyLabViewModel: ObservableObject {
                         }
 
                         // Immediately update the displayed active voicing on this exact key press
-                        self.activeVoicing = exactChord
+                        if let matching = self.matchingVoicings.first(where: {
+                            $0.id == exactChord.id || ($0.chordSymbol == exactChord.chordSymbol && $0.midiNotes == exactChord.midiNotes)
+                        }) {
+                            self.activeVoicing = matching
+                            self.addToHistory(matching)
+                        } else {
+                            self.activeVoicing = exactChord
+                            self.addToHistory(exactChord)
+                        }
                     }
                 }
             }
@@ -182,19 +194,63 @@ public class HarmonyLabViewModel: ObservableObject {
         guard let choice = pool.randomElement() else { return }
         self.activeVoicing = choice
         triggerAudition(choice)
+        self.addToHistory(choice)
     }
 
     public func selectVoicing(_ voicing: NativeVoicing) {
         self.activeVoicing = voicing
         triggerAudition(voicing)
+        self.addToHistory(voicing)
     }
 
     public func storeCurrentVoicing(inSlot slotIndex: Int) {
-        guard slotIndex >= 0 && slotIndex < 10, let chord = activeVoicing else { return }
-        chordSlots[slotIndex].chord = chord
-        chordSlots[slotIndex].customName = chord.chordSymbol
+        guard let chord = activeVoicing else { return }
+        storeVoicing(chord, inSlot: slotIndex)
+    }
+
+    public func storeVoicing(_ voicing: NativeVoicing, inSlot slotIndex: Int) {
+        guard slotIndex >= 0 && slotIndex < 10 else { return }
+        chordSlots[slotIndex].chord = voicing
+        chordSlots[slotIndex].customName = voicing.chordSymbol
         syncSlotToAudioUnit(slotIndex)
         saveSlots()
+    }
+
+    // MARK: - History Management (Last 12 Chords)
+
+    public func addToHistory(_ chord: NativeVoicing) {
+        // Prevent duplicate at top
+        if let first = chordHistory.first,
+           first.chord.chordSymbol == chord.chordSymbol && first.chord.midiNotes == chord.midiNotes {
+            return
+        }
+        let item = ChordHistoryItem(chord: chord)
+        chordHistory.insert(item, at: 0)
+        if chordHistory.count > 12 {
+            chordHistory = Array(chordHistory.prefix(12))
+        }
+        saveHistory()
+    }
+
+    public func clearHistory() {
+        chordHistory.removeAll()
+        saveHistory()
+    }
+
+    public func selectHistoryChord(_ historyItem: ChordHistoryItem) {
+        let chord = historyItem.chord
+        let (pc, oct) = VoicingsEngine.parseNoteName(chord.topNote)
+        if selectedPitchClass != pc || selectedOctave != oct {
+            selectedPitchClass = pc
+            selectedOctave = oct
+        }
+        self.activeVoicing = chord
+        triggerAudition(chord)
+    }
+
+    public func isVoicingSelected(_ voicing: NativeVoicing) -> Bool {
+        guard let active = activeVoicing else { return false }
+        return active.id == voicing.id || (active.chordSymbol == voicing.chordSymbol && active.midiNotes == voicing.midiNotes)
     }
 
     public func clearSlot(_ slotIndex: Int) {
@@ -281,6 +337,19 @@ public class HarmonyLabViewModel: ObservableObject {
            let decoded = try? JSONDecoder().decode([ChordSlot].self, from: data),
            decoded.count == 10 {
             self.chordSlots = decoded
+        }
+    }
+
+    private func saveHistory() {
+        if let encoded = try? JSONEncoder().encode(chordHistory) {
+            UserDefaults.standard.set(encoded, forKey: "HarmonyLab_ChordHistory_v1")
+        }
+    }
+
+    private func loadHistory() {
+        if let data = UserDefaults.standard.data(forKey: "HarmonyLab_ChordHistory_v1"),
+           let decoded = try? JSONDecoder().decode([ChordHistoryItem].self, from: data) {
+            self.chordHistory = Array(decoded.prefix(12))
         }
     }
 }

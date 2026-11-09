@@ -73,6 +73,18 @@ public struct ChordSlot: Identifiable, Equatable, Codable {
     }
 }
 
+public struct ChordHistoryItem: Identifiable, Equatable, Codable {
+    public let id: String
+    public let chord: NativeVoicing
+    public let timestamp: Date
+
+    public init(id: String = UUID().uuidString, chord: NativeVoicing, timestamp: Date = Date()) {
+        self.id = id
+        self.chord = chord
+        self.timestamp = timestamp
+    }
+}
+
 public class VoicingsEngine {
     public static let shared = VoicingsEngine()
 
@@ -120,6 +132,13 @@ public class VoicingsEngine {
         let oct = (Int(midi) / 12) - 1
         let idx = Int(midi) % 12
         return "\(sharpNames[idx])\(oct)"
+    }
+
+    public static func parseNoteName(_ noteName: String) -> (pitchClass: String, octave: Int) {
+        let midi = noteNameToMidi(noteName)
+        let oct = (Int(midi) / 12) - 1
+        let pc = sharpNames[Int(midi) % 12]
+        return (pc, oct)
     }
 
     public static let seedVoicings: [NativeVoicing] = [
@@ -836,67 +855,15 @@ public class VoicingsEngine {
         var results: [NativeVoicing] = []
         var seen = Set<String>()
 
-        // 1. Direct seed matches first
-        for v in VoicingsEngine.seedVoicings {
+        for (idx, v) in VoicingsEngine.seedVoicings.enumerated() {
             if family != .all && v.family != family { continue }
-            if v.topPitchClass == normTarget {
-                results.append(v)
-                seen.insert(v.chordSymbol)
-            }
-        }
-
-        // 2. Transposed matches for rich options on any top note
-        for v in VoicingsEngine.seedVoicings {
-            if family != .all && v.family != family { continue }
-
-            let origTopMidi = VoicingsEngine.noteNameToMidi(v.topNote)
-            let semitoneDelta = Int(targetTopMidi) - Int(origTopMidi)
-            if semitoneDelta == 0 && seen.contains(v.chordSymbol) { continue }
-
-            var transposedNotes: [UInt8] = []
-            var valid = true
-            for note in v.midiNotes {
-                let shifted = Int(note) + semitoneDelta
-                if shifted < 0 || shifted > 127 { valid = false; break }
-                transposedNotes.append(UInt8(shifted))
-            }
-            if !valid { continue }
-
-            // Transpose root note name
-            let origRootMidi = VoicingsEngine.noteNameToMidi("\(v.root)4")
-            let newRootMidi = UInt8(clamping: Int(origRootMidi) + semitoneDelta)
-            let newRootName = VoicingsEngine.sharpNames[Int(newRootMidi) % 12]
-
-            var newSymbol = v.chordSymbol
-            if v.chordSymbol.hasPrefix(v.root) {
-                newSymbol = newRootName + v.chordSymbol.dropFirst(v.root.count)
-            }
-            if seen.contains(newSymbol) { continue }
-            seen.insert(newSymbol)
-
-            var newBassMidi: UInt8? = nil
-            if let bass = v.bassNoteMidi {
-                let shiftedBass = Int(bass) + semitoneDelta
-                if shiftedBass >= 0 && shiftedBass <= 127 {
-                    newBassMidi = UInt8(shiftedBass)
+            if let transposed = voicingForRecipe(index: idx, targetTopMidi: targetTopMidi) {
+                let sig = "\(transposed.chordSymbol)-\(transposed.midiNotes)"
+                if !seen.contains(sig) {
+                    seen.insert(sig)
+                    results.append(transposed)
                 }
             }
-
-            let transposed = NativeVoicing(
-                id: "\(v.id)-t\(targetTopMidi)",
-                chordSymbol: newSymbol,
-                name: v.name,
-                root: newRootName,
-                family: v.family,
-                topNote: "\(normTarget)\(topOctave)",
-                topPitchClass: normTarget,
-                midiNotes: transposedNotes,
-                recipe: v.recipe,
-                styleTags: v.styleTags,
-                descriptionText: v.descriptionText,
-                bassNoteMidi: newBassMidi
-            )
-            results.append(transposed)
         }
 
         return results

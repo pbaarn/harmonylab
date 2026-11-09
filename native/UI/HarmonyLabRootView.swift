@@ -118,16 +118,17 @@ public struct HarmonyLabRootView: View {
                 }
                 .frame(width: 280)
 
-                // Right Stage: 10 Stored Chord Trigger Slots + Piano Visualizer
+                // Right Stage: 10 Stored Chord Trigger Slots + Chord History + Piano Visualizer
                 VStack(spacing: 8) {
                     ChordSlotsView(viewModel: viewModel)
+                    ChordHistoryView(viewModel: viewModel)
                     PianoVisualizerView(viewModel: viewModel)
                 }
                 .frame(maxWidth: .infinity)
             }
         }
         .padding(10)
-        .frame(minWidth: 840, minHeight: 520)
+        .frame(minWidth: 860, minHeight: 620)
         .background(Color(red: 0.06, green: 0.07, blue: 0.08))
     }
 }

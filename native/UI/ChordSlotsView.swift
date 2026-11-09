@@ -124,6 +124,22 @@ struct SlotCard: View {
                 .stroke(strokeColor, lineWidth: strokeWidth)
         )
         .animation(.easeInOut(duration: 0.1), value: isTriggered)
+        .contextMenu {
+            if let active = viewModel.activeVoicing {
+                Button("Store '\(active.chordSymbol)' in Slot #\(index + 1)") {
+                    viewModel.storeCurrentVoicing(inSlot: index)
+                }
+            }
+            if let chord = slot.chord {
+                Button("Audition Slot #\(index + 1) (\(chord.chordSymbol))") {
+                    viewModel.triggerAudition(chord)
+                }
+                Divider()
+                Button("Clear Slot #\(index + 1)", role: .destructive) {
+                    viewModel.clearSlot(index)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -177,7 +193,7 @@ struct SlotCard: View {
                     Image(systemName: "play.fill")
                         .font(.system(size: 8))
                         .foregroundColor(.white)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 18, height: 20)
                         .background(Color.white.opacity(0.15))
                         .cornerRadius(4)
                 }
@@ -192,11 +208,28 @@ struct SlotCard: View {
                 .frame(height: 20)
                 .help("Drag MIDI directly onto Logic Pro Track")
 
+                Menu {
+                    if let active = viewModel.activeVoicing {
+                        Button("Replace with Active (\(active.chordSymbol))") {
+                            viewModel.storeCurrentVoicing(inSlot: index)
+                        }
+                    }
+                    Button("Clear Slot", role: .destructive) {
+                        viewModel.clearSlot(index)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 12, height: 20)
+                }
+                .menuStyle(BorderlessButtonMenuStyle())
+
                 Button(action: { viewModel.clearSlot(index) }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8))
                         .foregroundColor(.secondary)
-                        .frame(width: 16, height: 20)
+                        .frame(width: 14, height: 20)
                 }
                 .buttonStyle(PlainButtonStyle())
                 .help("Clear Slot")

@@ -3,6 +3,7 @@
 // HarmonyLab AUv3 MIDI FX
 //
 // Narrow scrollable column of voicings matching current top note & filters
+// Auto-scrolls so the chosen chord is always in the visible area without manual scrolling
 //
 
 import SwiftUI
@@ -12,6 +13,13 @@ public struct VoicingListView: View {
 
     public init(viewModel: HarmonyLabViewModel) {
         self.viewModel = viewModel
+    }
+
+    private var isActiveInList: Bool {
+        guard let active = viewModel.activeVoicing else { return false }
+        return viewModel.matchingVoicings.contains(where: {
+            $0.id == active.id || ($0.chordSymbol == active.chordSymbol && $0.midiNotes == active.midiNotes)
+        })
     }
 
     public var body: some View {
@@ -24,39 +32,82 @@ public struct VoicingListView: View {
                 Text("VOICINGS (\(viewModel.matchingVoicings.count))")
                     .font(.system(size: 10, weight: .black, design: .monospaced))
                     .foregroundColor(.secondary)
+
                 Spacer()
+
+                if let active = viewModel.activeVoicing {
+                    Text("ACTIVE: \(active.chordSymbol)")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.18))
+                        .cornerRadius(3)
+                }
             }
             .padding(.horizontal, 4)
 
-            // Scrollable List
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(Array(viewModel.matchingVoicings.enumerated()), id: \.element.id) { index, voicing in
-                        VoicingRow(
-                            voicing: voicing,
-                            index: index + 1,
-                            isSelected: viewModel.activeVoicing?.id == voicing.id,
-                            onSelect: { viewModel.selectVoicing(voicing) },
-                            onStoreInSlot: { slotIdx in
-                                viewModel.activeVoicing = voicing
-                                viewModel.storeCurrentVoicing(inSlot: slotIdx)
-                            }
-                        )
-                    }
+            // Pinned Card if Active Voicing is Outside Current Filter / Search
+            if let active = viewModel.activeVoicing, !isActiveInList {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("CHOSEN CHORD:")
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                        .foregroundColor(.yellow)
+                        .padding(.leading, 2)
 
-                    if viewModel.matchingVoicings.isEmpty {
-                        VStack(spacing: 6) {
-                            Text("No matching voicings")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.secondary)
-                            Text("Try another melody note or family.")
-                                .font(.system(size: 10))
-                                .foregroundColor(Color.white.opacity(0.3))
+                    VoicingRow(
+                        voicing: active,
+                        index: 0,
+                        isSelected: true,
+                        onSelect: { viewModel.selectVoicing(active) },
+                        onStoreInSlot: { slotIdx in
+                            viewModel.storeVoicing(active, inSlot: slotIdx)
                         }
-                        .padding(.vertical, 30)
-                    }
+                    )
                 }
-                .padding(.trailing, 2)
+                .padding(.bottom, 2)
+            }
+
+            // Scrollable List with Auto-Scroll to Chosen Chord
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(Array(viewModel.matchingVoicings.enumerated()), id: \.element.id) { index, voicing in
+                            VoicingRow(
+                                voicing: voicing,
+                                index: index + 1,
+                                isSelected: viewModel.isVoicingSelected(voicing),
+                                onSelect: { viewModel.selectVoicing(voicing) },
+                                onStoreInSlot: { slotIdx in
+                                    viewModel.storeVoicing(voicing, inSlot: slotIdx)
+                                }
+                            )
+                            .id(voicing.id)
+                        }
+
+                        if viewModel.matchingVoicings.isEmpty {
+                            VStack(spacing: 6) {
+                                Text("No matching voicings")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                Text("Try another melody note or family.")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Color.white.opacity(0.3))
+                            }
+                            .padding(.vertical, 30)
+                        }
+                    }
+                    .padding(.trailing, 2)
+                }
+                .onChange(of: viewModel.activeVoicing?.id) { _, _ in
+                    scrollToActive(proxy: proxy)
+                }
+                .onChange(of: viewModel.matchingVoicings.count) { _, _ in
+                    scrollToActive(proxy: proxy)
+                }
+                .onAppear {
+                    scrollToActive(proxy: proxy)
+                }
             }
         }
         .padding(10)
@@ -66,6 +117,19 @@ public struct VoicingListView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+
+    private func scrollToActive(proxy: ScrollViewProxy) {
+        guard let active = viewModel.activeVoicing else { return }
+        if let matching = viewModel.matchingVoicings.first(where: {
+            $0.id == active.id || ($0.chordSymbol == active.chordSymbol && $0.midiNotes == active.midiNotes)
+        }) {
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(matching.id, anchor: .center)
+                }
+            }
+        }
     }
 }
 
