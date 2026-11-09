@@ -71,7 +71,7 @@ public struct VoicingListView: View {
             // Scrollable List with Auto-Scroll to Chosen Chord
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 4) {
+                    LazyVStack(spacing: 4) {
                         ForEach(Array(viewModel.matchingVoicings.enumerated()), id: \.element.id) { index, voicing in
                             VoicingRow(
                                 voicing: voicing,
@@ -124,11 +124,7 @@ public struct VoicingListView: View {
         if let matching = viewModel.matchingVoicings.first(where: {
             $0.id == active.id || ($0.chordSymbol == active.chordSymbol && $0.midiNotes == active.midiNotes)
         }) {
-            DispatchQueue.main.async {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    proxy.scrollTo(matching.id, anchor: .center)
-                }
-            }
+            proxy.scrollTo(matching.id, anchor: .center)
         }
     }
 }
@@ -180,22 +176,6 @@ struct VoicingRow: View {
                 .background(isSelected ? Color.blue.opacity(0.2) : Color(white: 0.2))
                 .foregroundColor(isSelected ? Color.blue : Color(white: 0.7))
                 .cornerRadius(3)
-
-            // Store in Slot Menu
-            Menu {
-                Text("Store in Slot:")
-                ForEach(0..<10, id: \.self) { slotIdx in
-                    Button("Slot #\(slotIdx + 1)") {
-                        onStoreInSlot(slotIdx)
-                    }
-                }
-            } label: {
-                Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .frame(width: 18, height: 22)
-            }
-            .menuStyle(BorderlessButtonMenuStyle())
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
@@ -208,6 +188,15 @@ struct VoicingRow: View {
         .contentShape(Rectangle())
         .onTapGesture {
             onSelect()
+        }
+        .contextMenu {
+            Menu("Store '\(voicing.chordSymbol)' in Slot...") {
+                ForEach(0..<10, id: \.self) { slotIdx in
+                    Button("Slot #\(slotIdx + 1)") {
+                        onStoreInSlot(slotIdx)
+                    }
+                }
+            }
         }
     }
 }

@@ -14,22 +14,38 @@ public class HarmonyLabViewModel: ObservableObject {
         }
     }
 
+    private var isBatchUpdating = false
+    private var saveHistoryWorkItem: DispatchWorkItem?
+
     // Filter controls
     @Published public var selectedPitchClass: String = "E" {
-        didSet { refreshMatchingVoicings() }
+        didSet {
+            if !isBatchUpdating { refreshMatchingVoicings() }
+        }
     }
     @Published public var selectedOctave: Int = 5 {
-        didSet { refreshMatchingVoicings() }
+        didSet {
+            if !isBatchUpdating { refreshMatchingVoicings() }
+        }
     }
     @Published public var selectedFamily: ChordFamily = .all {
         didSet {
             audioUnit?.setSelectedFamily(HarmonyLabViewModel.familyCode(for: selectedFamily))
-            refreshMatchingVoicings()
+            if !isBatchUpdating { refreshMatchingVoicings() }
             saveSettings()
         }
     }
     @Published public var searchQuery: String = "" {
         didSet { filterVoicings() }
+    }
+
+    public func updateTopNote(pitchClass: String, octave: Int) {
+        if selectedPitchClass == pitchClass && selectedOctave == octave { return }
+        isBatchUpdating = true
+        selectedPitchClass = pitchClass
+        selectedOctave = octave
+        isBatchUpdating = false
+        refreshMatchingVoicings()
     }
 
     // Matching voicings in narrow column
@@ -115,7 +131,7 @@ public class HarmonyLabViewModel: ObservableObject {
     }
 
     private func startPollingAudioUnit() {
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.06, repeats: true) { [weak self] _ in
             guard let self = self, let au = self.audioUnit else { return }
 
             let slot = au.getLastTriggeredSlot()
@@ -168,10 +184,8 @@ public class HarmonyLabViewModel: ObservableObject {
                         let melodyPc = VoicingsEngine.sharpNames[Int(targetTopMidi) % 12]
                         let melodyOct = (Int(targetTopMidi) / 12) - 1
 
-                        if self.selectedPitchClass != melodyPc || self.selectedOctave != melodyOct {
-                            self.selectedPitchClass = melodyPc
-                            self.selectedOctave = melodyOct
-                        }
+                        // Batch update pitch and octave to avoid double refresh
+                        self.updateTopNote(pitchClass: melodyPc, octave: melodyOct)
 
                         // Immediately update the displayed active voicing on this exact key press
                         if let matching = self.matchingVoicings.first(where: {
@@ -187,6 +201,8 @@ public class HarmonyLabViewModel: ObservableObject {
                 }
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        pollTimer = timer
     }
 
     public func refreshMatchingVoicings() {
@@ -252,7 +268,15 @@ public class HarmonyLabViewModel: ObservableObject {
         if chordHistory.count > 12 {
             chordHistory = Array(chordHistory.prefix(12))
         }
-        saveHistory()
+
+        // Debounce disk I/O to background queue so key playback remains silky smooth
+        saveHistoryWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.saveHistory()
+        }
+        saveHistoryWorkItem = work
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.5, execute: work)
     }
 
     public func clearHistory() {
@@ -263,10 +287,7 @@ public class HarmonyLabViewModel: ObservableObject {
     public func selectHistoryChord(_ historyItem: ChordHistoryItem) {
         let chord = historyItem.chord
         let (pc, oct) = VoicingsEngine.parseNoteName(chord.topNote)
-        if selectedPitchClass != pc || selectedOctave != oct {
-            selectedPitchClass = pc
-            selectedOctave = oct
-        }
+        self.updateTopNote(pitchClass: pc, octave: oct)
         self.activeVoicing = chord
         triggerAudition(chord)
     }

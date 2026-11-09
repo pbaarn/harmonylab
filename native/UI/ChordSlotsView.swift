@@ -208,31 +208,14 @@ struct SlotCard: View {
                 .frame(height: 20)
                 .help("Drag MIDI directly onto Logic Pro Track")
 
-                Menu {
-                    if let active = viewModel.activeVoicing {
-                        Button("Replace with Active (\(active.chordSymbol))") {
-                            viewModel.storeCurrentVoicing(inSlot: index)
-                        }
-                    }
-                    Button("Clear Slot", role: .destructive) {
-                        viewModel.clearSlot(index)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 12, height: 20)
-                }
-                .menuStyle(BorderlessButtonMenuStyle())
-
                 Button(action: { viewModel.clearSlot(index) }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8))
                         .foregroundColor(.secondary)
-                        .frame(width: 14, height: 20)
+                        .frame(width: 16, height: 20)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .help("Clear Slot")
+                .help("Clear Slot (Right-click to Replace)")
             } else {
                 Button(action: { viewModel.storeCurrentVoicing(inSlot: index) }) {
                     HStack(spacing: 2) {

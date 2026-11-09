@@ -114,7 +114,7 @@ struct HistoryCard: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            // Top Row: Index & Chord Symbol
+            // Top Row: Index & Play Button
             HStack(spacing: 3) {
                 Text("#\(index + 1)")
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
@@ -132,26 +132,6 @@ struct HistoryCard: View {
                         .cornerRadius(3)
                 }
                 .buttonStyle(PlainButtonStyle())
-
-                // Store in Slot Menu Button
-                Menu {
-                    Text("Store '\(item.chord.chordSymbol)' in Slot:")
-                    ForEach(0..<10, id: \.self) { slotIdx in
-                        let key = viewModel.getTriggerKeyName(forSlot: slotIdx)
-                        let curName = viewModel.chordSlots[slotIdx].chord?.chordSymbol ?? "Empty"
-                        Button("Slot #\(slotIdx + 1) [\(key)]: \(curName)") {
-                            viewModel.storeVoicing(item.chord, inSlot: slotIdx)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(isSelected ? .white : .secondary)
-                        .frame(width: 16, height: 16)
-                        .background(isSelected ? Color.blue : Color(white: 0.2))
-                        .cornerRadius(3)
-                }
-                .menuStyle(BorderlessButtonMenuStyle())
             }
 
             // Chord Symbol
