@@ -158,6 +158,8 @@ void Engine::handleNoteOn(
     if (note >= baseTrigger && note < baseTrigger + NUM_CHORD_SLOTS) {
         size_t slotIdx = note - baseTrigger;
         mLastTriggeredSlot.store((int)slotIdx, std::memory_order_relaxed);
+        mHeldSlotIndex.store((int)slotIdx, std::memory_order_relaxed);
+        mSlotEventCounter.fetch_add(1, std::memory_order_relaxed);
 
         const StoredChordSlot& slot = mSlots[slotIdx];
         if (slot.count > 0) {
@@ -193,6 +195,7 @@ void Engine::handleNoteOn(
     // 2. Performance Melody Harmonizer with SURPRISE MODE
     if (mLiveHarmonizerEnabled.load(std::memory_order_relaxed)) {
         mLastTriggeredMelodyNote.store((int)note, std::memory_order_relaxed);
+        mHeldMelodyNote.store((int)note, std::memory_order_relaxed);
 
         uint8_t targetFamily = mSelectedFamily.load(std::memory_order_relaxed);
 
@@ -297,6 +300,17 @@ void Engine::handleNoteOff(
     }
 
     uint8_t baseTrigger = mTriggerBaseNote.load(std::memory_order_relaxed);
+    if (note >= baseTrigger && note < baseTrigger + NUM_CHORD_SLOTS) {
+        size_t slotIdx = note - baseTrigger;
+        if (mHeldSlotIndex.load(std::memory_order_relaxed) == (int)slotIdx) {
+            mHeldSlotIndex.store(-1, std::memory_order_relaxed);
+        }
+    } else {
+        if (mHeldMelodyNote.load(std::memory_order_relaxed) == (int)note) {
+            mHeldMelodyNote.store(-1, std::memory_order_relaxed);
+        }
+    }
+
     if (!foundVoice && !(note >= baseTrigger && note < baseTrigger + NUM_CHORD_SLOTS)) {
         uint8_t bytes[3] = { (uint8_t)(0x80 | (channel & 0x0F)), note, 0 };
         midiOutputBlock(st, 0, 3, bytes);
@@ -304,6 +318,8 @@ void Engine::handleNoteOff(
 }
 
 void Engine::allNotesOff(AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime) {
+    mHeldSlotIndex.store(-1, std::memory_order_relaxed);
+    mHeldMelodyNote.store(-1, std::memory_order_relaxed);
     AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? baseTime : AUEventSampleTimeImmediate;
     for (size_t i = 0; i < MAX_ACTIVE_VOICES; ++i) {
         if (mVoices[i].active) {

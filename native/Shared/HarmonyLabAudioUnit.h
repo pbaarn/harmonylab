@@ -17,8 +17,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 // Polling triggers & live voiced surprise chord from UI
 - (NSInteger)getLastTriggeredSlot;
+- (NSInteger)getHeldSlotIndex;
+- (uint32_t)getSlotEventCounter;
 - (void)clearLastTriggeredSlot;
+
 - (NSInteger)getLastTriggeredMelodyNote;
+- (NSInteger)getHeldMelodyNote;
 - (void)clearLastTriggeredMelodyNote;
 
 - (NSInteger)getLastVoicedRecipeIndex;

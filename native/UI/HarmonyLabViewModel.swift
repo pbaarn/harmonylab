@@ -94,6 +94,7 @@ public class HarmonyLabViewModel: ObservableObject {
     private var pollTimer: Timer?
     private var allFilteredVoicings: [NativeVoicing] = []
     private var lastRecordedEventCounter: UInt32 = 0
+    private var lastRecordedSlotCounter: UInt32 = 0
 
     public static func familyCode(for family: ChordFamily) -> UInt8 {
         switch family {
@@ -134,33 +135,30 @@ public class HarmonyLabViewModel: ObservableObject {
         let timer = Timer(timeInterval: 0.06, repeats: true) { [weak self] _ in
             guard let self = self, let au = self.audioUnit else { return }
 
-            let slot = au.getLastTriggeredSlot()
-            if slot >= 0 && slot < 10 {
-                if self.lastTriggeredSlot != slot {
-                    self.lastTriggeredSlot = slot
-                    // Update activeVoicing and piano visualizer to the chord stored in this slot
+            // 1. Slot Trigger & Hold Synchronization
+            let slotCounter = au.getSlotEventCounter()
+            if self.lastRecordedSlotCounter != slotCounter {
+                self.lastRecordedSlotCounter = slotCounter
+                let slot = au.getLastTriggeredSlot()
+                if slot >= 0 && slot < 10 {
                     if let slotChord = self.chordSlots[slot].chord {
                         self.activeVoicing = slotChord
-                    }
-                    // Auto-clear after 250ms
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        if self.lastTriggeredSlot == slot {
-                            self.lastTriggeredSlot = nil
-                        }
                     }
                 }
             }
 
-            let melody = au.getLastTriggeredMelodyNote()
-            if melody >= 0 && melody <= 127 {
-                if self.lastTriggeredMelodyNote != melody {
-                    self.lastTriggeredMelodyNote = melody
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        if self.lastTriggeredMelodyNote == melody {
-                            self.lastTriggeredMelodyNote = nil
-                        }
-                    }
-                }
+            // Visual highlight follows key hold state directly
+            let heldSlot = au.getHeldSlotIndex()
+            let newTriggeredSlot: Int? = heldSlot >= 0 ? heldSlot : nil
+            if self.lastTriggeredSlot != newTriggeredSlot {
+                self.lastTriggeredSlot = newTriggeredSlot
+            }
+
+            // 2. Melody Note Visual Feedback follows held note
+            let heldMelody = au.getHeldMelodyNote()
+            let newTriggeredMelody: Int? = heldMelody >= 0 ? heldMelody : nil
+            if self.lastTriggeredMelodyNote != newTriggeredMelody {
+                self.lastTriggeredMelodyNote = newTriggeredMelody
             }
 
             // Real-time synchronization of Live Surprise Chord on EVERY key press

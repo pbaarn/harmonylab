@@ -57,9 +57,12 @@ public:
 
     // UI state queries
     int getLastTriggeredSlot() const { return mLastTriggeredSlot.load(std::memory_order_relaxed); }
+    int getHeldSlotIndex() const { return mHeldSlotIndex.load(std::memory_order_relaxed); }
+    uint32_t getSlotEventCounter() const { return mSlotEventCounter.load(std::memory_order_relaxed); }
     void clearLastTriggeredSlot() { mLastTriggeredSlot.store(-1, std::memory_order_relaxed); }
 
     int getLastTriggeredMelodyNote() const { return mLastTriggeredMelodyNote.load(std::memory_order_relaxed); }
+    int getHeldMelodyNote() const { return mHeldMelodyNote.load(std::memory_order_relaxed); }
     void clearLastTriggeredMelodyNote() { mLastTriggeredMelodyNote.store(-1, std::memory_order_relaxed); }
 
     int getLastVoicedRecipeIndex() const { return mLastVoicedRecipeIndex.load(std::memory_order_relaxed); }
@@ -105,7 +108,10 @@ private:
     std::atomic<int> mOctaveOffset{0};
     std::atomic<uint8_t> mTriggerBaseNote{36}; // C2 by default (slots C2 through A2)
     std::atomic<int> mLastTriggeredSlot{-1};
+    std::atomic<int> mHeldSlotIndex{-1};
+    std::atomic<uint32_t> mSlotEventCounter{0};
     std::atomic<int> mLastTriggeredMelodyNote{-1};
+    std::atomic<int> mHeldMelodyNote{-1};
 
     // Live surprise reporting to UI
     std::atomic<int> mLastVoicedRecipeIndex{-1};

@@ -143,6 +143,14 @@
     return _engine ? _engine->getLastTriggeredSlot() : -1;
 }
 
+- (NSInteger)getHeldSlotIndex {
+    return _engine ? _engine->getHeldSlotIndex() : -1;
+}
+
+- (uint32_t)getSlotEventCounter {
+    return _engine ? _engine->getSlotEventCounter() : 0;
+}
+
 - (void)clearLastTriggeredSlot {
     if (_engine) {
         _engine->clearLastTriggeredSlot();
@@ -151,6 +159,10 @@
 
 - (NSInteger)getLastTriggeredMelodyNote {
     return _engine ? _engine->getLastTriggeredMelodyNote() : -1;
+}
+
+- (NSInteger)getHeldMelodyNote {
+    return _engine ? _engine->getHeldMelodyNote() : -1;
 }
 
 - (void)clearLastTriggeredMelodyNote {
