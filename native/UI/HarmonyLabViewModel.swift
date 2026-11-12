@@ -295,6 +295,15 @@ public class HarmonyLabViewModel: ObservableObject {
         return active.id == voicing.id || (active.chordSymbol == voicing.chordSymbol && active.midiNotes == voicing.midiNotes)
     }
 
+    public func clearAllSlots() {
+        for i in 0..<10 {
+            chordSlots[i].chord = nil
+            chordSlots[i].customName = nil
+            audioUnit?.clearSlot(i)
+        }
+        saveSlots()
+    }
+
     public func clearSlot(_ slotIndex: Int) {
         guard slotIndex >= 0 && slotIndex < 10 else { return }
         chordSlots[slotIndex].chord = nil

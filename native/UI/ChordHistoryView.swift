@@ -160,6 +160,18 @@ struct HistoryCard: View {
         .onTapGesture {
             viewModel.selectHistoryChord(item)
         }
+        .onDrag {
+            NSItemProvider(object: item.chord.dragPayload as NSString)
+        } preview: {
+            Text(item.chord.chordSymbol)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.blue)
+                .cornerRadius(5)
+        }
+        .help("Click to audition • Drag onto a slot to store it")
         .contextMenu {
             Button("Audition '\(item.chord.chordSymbol)'") {
                 viewModel.selectHistoryChord(item)
@@ -174,5 +186,25 @@ struct HistoryCard: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Drag payload (history card → slot)
+
+extension NativeVoicing {
+    static let dragPrefix = "harmonylab-chord:"
+
+    /// JSON-encoded chord, prefixed so foreign text drops are ignored.
+    var dragPayload: String {
+        guard let data = try? JSONEncoder().encode(self),
+              let json = String(data: data, encoding: .utf8) else { return "" }
+        return NativeVoicing.dragPrefix + json
+    }
+
+    static func fromDragPayload(_ payload: String) -> NativeVoicing? {
+        guard payload.hasPrefix(dragPrefix) else { return nil }
+        let json = String(payload.dropFirst(dragPrefix.count))
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(NativeVoicing.self, from: data)
     }
 }

@@ -6,12 +6,18 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 public struct ChordSlotsView: View {
     @ObservedObject var viewModel: HarmonyLabViewModel
+    @State private var confirmClearAll = false
 
     public init(viewModel: HarmonyLabViewModel) {
         self.viewModel = viewModel
+    }
+
+    private var hasAnySlot: Bool {
+        viewModel.chordSlots.contains { $0.chord != nil }
     }
 
     public var body: some View {
@@ -28,6 +34,34 @@ public struct ChordSlotsView: View {
                 }
 
                 Spacer()
+
+                // Clear All (two-step confirm: click once, then click "Confirm?" within 3s)
+                Button(action: {
+                    if confirmClearAll {
+                        viewModel.clearAllSlots()
+                        confirmClearAll = false
+                    } else {
+                        confirmClearAll = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            confirmClearAll = false
+                        }
+                    }
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(confirmClearAll ? "Confirm?" : "Clear All")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(confirmClearAll ? Color.red : Color(white: 0.18))
+                    .foregroundColor(confirmClearAll ? .white : (hasAnySlot ? .red : .secondary))
+                    .cornerRadius(4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(!hasAnySlot)
+                .help("Clear all 10 slots (click twice to confirm)")
 
                 // Trigger Octave selector
                 HStack(spacing: 4) {
@@ -79,6 +113,7 @@ public struct ChordSlotsView: View {
 struct SlotCard: View {
     let index: Int
     @ObservedObject var viewModel: HarmonyLabViewModel
+    @State private var isDropTargeted = false
 
     var isTriggered: Bool {
         viewModel.lastTriggeredSlot == index
@@ -93,7 +128,9 @@ struct SlotCard: View {
     }
 
     private var backgroundColor: Color {
-        if isTriggered {
+        if isDropTargeted {
+            return Color.green.opacity(0.35)
+        } else if isTriggered {
             return Color.blue.opacity(0.6)
         } else if slot.chord != nil {
             return Color(white: 0.16)
@@ -103,11 +140,27 @@ struct SlotCard: View {
     }
 
     private var strokeColor: Color {
-        isTriggered ? Color.yellow : Color.white.opacity(0.1)
+        if isDropTargeted { return Color.green }
+        return isTriggered ? Color.yellow : Color.white.opacity(0.1)
     }
 
     private var strokeWidth: CGFloat {
-        isTriggered ? 2.0 : 1.0
+        (isTriggered || isDropTargeted) ? 2.0 : 1.0
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first(where: { $0.canLoadObject(ofClass: NSString.self) }) else {
+            return false
+        }
+        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+            guard let payload = object as? String,
+                  let chord = NativeVoicing.fromDragPayload(payload) else { return }
+            DispatchQueue.main.async {
+                // Overwrites the slot if it is already occupied
+                viewModel.storeVoicing(chord, inSlot: index)
+            }
+        }
+        return true
     }
 
     var body: some View {
@@ -124,6 +177,7 @@ struct SlotCard: View {
                 .stroke(strokeColor, lineWidth: strokeWidth)
         )
         .animation(.easeInOut(duration: 0.1), value: isTriggered)
+        .onDrop(of: [UTType.plainText, UTType.utf8PlainText, UTType.text], isTargeted: $isDropTargeted, perform: handleDrop)
         .contextMenu {
             if let active = viewModel.activeVoicing {
                 Button("Store '\(active.chordSymbol)' in Slot #\(index + 1)") {
