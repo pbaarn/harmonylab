@@ -13,6 +13,14 @@ namespace HarmonyLab {
 constexpr size_t MAX_ACTIVE_VOICES = 32;
 constexpr size_t MAX_CHORD_NOTES = 16;
 constexpr size_t NUM_CHORD_SLOTS = 10;
+constexpr size_t MAX_FILTERED_CHORDS = 600;
+constexpr uint8_t SURPRISE_TRIGGER_NOTE = 46; // A#2, right above C2-A2 chord slots
+
+struct FilteredChord {
+    uint8_t notes[MAX_CHORD_NOTES] = {0};
+    uint8_t count = 0;
+    uint8_t topNote = 0;
+};
 
 struct ActiveVoice {
     uint8_t triggerKey = 0;
@@ -54,6 +62,10 @@ public:
     void setAddBassEnabled(bool enabled);
     void setOctaveOffset(int offset);
     void setTriggerBaseNote(uint8_t baseMidiNote); // Default 36 (C2) or 24 (C1)
+    void setSelectionMode(uint8_t mode); // 0 = Top Note, 1 = Common Tones
+    void beginFilteredChordBatch();
+    void addFilteredChord(const uint8_t* notes, uint8_t count, uint8_t topNote);
+    void commitFilteredChordBatch();
 
     // UI state queries
     int getLastTriggeredSlot() const { return mLastTriggeredSlot.load(std::memory_order_relaxed); }
@@ -69,6 +81,12 @@ public:
     int getLastVoicedMelodyNote() const { return mLastVoicedMelodyNote.load(std::memory_order_relaxed); }
     uint32_t getVoicedEventCounter() const { return mVoicedEventCounter.load(std::memory_order_relaxed); }
 
+    int getLastSurpriseChordIndex() const { return mLastSurpriseChordIndex.load(std::memory_order_relaxed); }
+    uint32_t getSurpriseEventCounter() const { return mSurpriseEventCounter.load(std::memory_order_relaxed); }
+
+    int getLastCommonToneChordIndex() const { return mLastCommonToneChordIndex.load(std::memory_order_relaxed); }
+    uint32_t getCommonToneEventCounter() const { return mCommonToneEventCounter.load(std::memory_order_relaxed); }
+
     // Manual chord audition trigger from UI
     void triggerAuditionChord(const uint8_t* notes, uint8_t count, AUMIDIOutputEventBlock midiOutputBlock);
     void stopAuditionChord(AUMIDIOutputEventBlock midiOutputBlock);
@@ -78,6 +96,7 @@ private:
     void handleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity, int offset, AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime);
     void handleNoteOff(uint8_t channel, uint8_t note, int offset, AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime);
     void allNotesOff(AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime);
+    void playChordToVoice(uint8_t channel, uint8_t triggerKey, uint8_t velocity, const uint8_t* notes, uint8_t count, int offset, AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime);
 
     // Fast lock-free XorShift32 PRNG for audio thread
     inline uint32_t fastRand() {
@@ -117,6 +136,19 @@ private:
     std::atomic<int> mLastVoicedRecipeIndex{-1};
     std::atomic<int> mLastVoicedMelodyNote{-1};
     std::atomic<uint32_t> mVoicedEventCounter{0};
+
+    // Selection mode (0 = Top Note, 1 = Common Tones) & double-buffered filtered chords
+    std::atomic<uint8_t> mSelectionMode{0};
+    FilteredChord mFilteredBuffers[2][MAX_FILTERED_CHORDS];
+    uint16_t mFilteredCounts[2] = {0, 0};
+    uint16_t mPendingFilteredCount = 0;
+    std::atomic<uint8_t> mActiveFilteredBuffer{0};
+    int mLastSurpriseIndex = -1;
+
+    std::atomic<int> mLastSurpriseChordIndex{-1};
+    std::atomic<uint32_t> mSurpriseEventCounter{0};
+    std::atomic<int> mLastCommonToneChordIndex{-1};
+    std::atomic<uint32_t> mCommonToneEventCounter{0};
 
     // Audition voice tracking
     ActiveVoice mAuditionVoice;

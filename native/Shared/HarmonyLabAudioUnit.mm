@@ -139,6 +139,30 @@
     }
 }
 
+- (void)setSelectionMode:(uint8_t)mode {
+    if (_engine) {
+        _engine->setSelectionMode(mode);
+    }
+}
+
+- (void)beginFilteredChordBatch {
+    if (_engine) {
+        _engine->beginFilteredChordBatch();
+    }
+}
+
+- (void)addFilteredChordNotes:(const uint8_t *)notes count:(uint8_t)count topNote:(uint8_t)topNote {
+    if (_engine) {
+        _engine->addFilteredChord(notes, count, topNote);
+    }
+}
+
+- (void)commitFilteredChordBatch {
+    if (_engine) {
+        _engine->commitFilteredChordBatch();
+    }
+}
+
 - (NSInteger)getLastTriggeredSlot {
     return _engine ? _engine->getLastTriggeredSlot() : -1;
 }
@@ -185,6 +209,22 @@
 
 - (void)clearLastVoicedInfo {
     // optional reset if needed
+}
+
+- (NSInteger)getLastSurpriseChordIndex {
+    return _engine ? _engine->getLastSurpriseChordIndex() : -1;
+}
+
+- (uint32_t)getSurpriseEventCounter {
+    return _engine ? _engine->getSurpriseEventCounter() : 0;
+}
+
+- (NSInteger)getLastCommonToneChordIndex {
+    return _engine ? _engine->getLastCommonToneChordIndex() : -1;
+}
+
+- (uint32_t)getCommonToneEventCounter {
+    return _engine ? _engine->getCommonToneEventCounter() : 0;
 }
 
 - (void)triggerAuditionNotes:(const uint8_t *)notes count:(uint8_t)count {

@@ -71,6 +71,34 @@ void Engine::setTriggerBaseNote(uint8_t baseMidiNote) {
     mTriggerBaseNote.store(baseMidiNote, std::memory_order_relaxed);
 }
 
+void Engine::setSelectionMode(uint8_t mode) {
+    mSelectionMode.store(mode, std::memory_order_relaxed);
+}
+
+void Engine::beginFilteredChordBatch() {
+    mPendingFilteredCount = 0;
+}
+
+void Engine::addFilteredChord(const uint8_t* notes, uint8_t count, uint8_t topNote) {
+    if (mPendingFilteredCount >= MAX_FILTERED_CHORDS || !notes) return;
+    uint8_t back = 1 - mActiveFilteredBuffer.load(std::memory_order_acquire);
+    FilteredChord& dst = mFilteredBuffers[back][mPendingFilteredCount];
+    uint8_t safeCount = std::min<uint8_t>(count, MAX_CHORD_NOTES);
+    dst.count = safeCount;
+    dst.topNote = topNote;
+    for (uint8_t i = 0; i < safeCount; ++i) {
+        dst.notes[i] = notes[i];
+    }
+    mPendingFilteredCount++;
+}
+
+void Engine::commitFilteredChordBatch() {
+    uint8_t back = 1 - mActiveFilteredBuffer.load(std::memory_order_acquire);
+    mFilteredCounts[back] = mPendingFilteredCount;
+    mLastSurpriseIndex = -1;
+    mActiveFilteredBuffer.store(back, std::memory_order_release);
+}
+
 void Engine::process(
     const AudioTimeStamp* timestamp,
     AUAudioFrameCount frameCount,
@@ -144,6 +172,43 @@ void Engine::handleMIDI1(
     }
 }
 
+void Engine::playChordToVoice(
+    uint8_t channel,
+    uint8_t triggerKey,
+    uint8_t velocity,
+    const uint8_t* notes,
+    uint8_t count,
+    int offset,
+    AUMIDIOutputEventBlock midiOutputBlock,
+    AUEventSampleTime baseTime
+) {
+    if (count == 0 || !notes) return;
+    ActiveVoice* targetVoice = nullptr;
+    for (size_t i = 0; i < MAX_ACTIVE_VOICES; ++i) {
+        if (!mVoices[i].active) {
+            targetVoice = &mVoices[i];
+            break;
+        }
+    }
+    if (!targetVoice) targetVoice = &mVoices[0];
+
+    uint8_t safeCount = std::min<uint8_t>(count, MAX_CHORD_NOTES);
+    targetVoice->triggerKey = triggerKey;
+    targetVoice->channel = channel;
+    targetVoice->noteCount = safeCount;
+    targetVoice->active = true;
+
+    int octOffset = mOctaveOffset.load(std::memory_order_relaxed);
+    AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? (baseTime + offset) : AUEventSampleTimeImmediate;
+
+    for (uint8_t n = 0; n < safeCount; ++n) {
+        int outNote = std::clamp((int)notes[n] + octOffset, 0, 127);
+        targetVoice->soundingNotes[n] = (uint8_t)outNote;
+        uint8_t noteOnBytes[3] = { (uint8_t)(0x90 | (channel & 0x0F)), (uint8_t)outNote, velocity };
+        midiOutputBlock(st, 0, 3, noteOnBytes);
+    }
+}
+
 void Engine::handleNoteOn(
     uint8_t channel,
     uint8_t note,
@@ -163,39 +228,75 @@ void Engine::handleNoteOn(
 
         const StoredChordSlot& slot = mSlots[slotIdx];
         if (slot.count > 0) {
-            ActiveVoice* targetVoice = nullptr;
-            for (size_t i = 0; i < MAX_ACTIVE_VOICES; ++i) {
-                if (!mVoices[i].active) {
-                    targetVoice = &mVoices[i];
-                    break;
-                }
-            }
-            if (!targetVoice) targetVoice = &mVoices[0];
-
-            targetVoice->triggerKey = note;
-            targetVoice->channel = channel;
-            targetVoice->noteCount = slot.count;
-            targetVoice->active = true;
-
-            int octOffset = mOctaveOffset.load(std::memory_order_relaxed);
-            AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? (baseTime + offset) : AUEventSampleTimeImmediate;
-
-            for (uint8_t n = 0; n < slot.count; ++n) {
-                int outNote = (int)slot.notes[n] + octOffset;
-                outNote = std::clamp(outNote, 0, 127);
-                targetVoice->soundingNotes[n] = (uint8_t)outNote;
-
-                uint8_t noteOnBytes[3] = { (uint8_t)(0x90 | (channel & 0x0F)), (uint8_t)outNote, velocity };
-                midiOutputBlock(st, 0, 3, noteOnBytes);
-            }
+            playChordToVoice(channel, note, velocity, slot.notes, slot.count, offset, midiOutputBlock, baseTime);
         }
         return; // Always return: slot trigger keys must NEVER voice as melody notes
     }
 
-    // 2. Performance Melody Harmonizer with SURPRISE MODE
+    // 2. Surprise Me MIDI Trigger (A#2 = 46, right above C2-A2 chord slots)
+    if (note == SURPRISE_TRIGGER_NOTE) {
+        uint8_t front = mActiveFilteredBuffer.load(std::memory_order_acquire);
+        uint16_t count = mFilteredCounts[front];
+        if (count > 0) {
+            uint16_t chosenIdx = (uint16_t)(fastRand() % count);
+            if (count > 1 && (int)chosenIdx == mLastSurpriseIndex) {
+                chosenIdx = (chosenIdx + 1) % count;
+            }
+            mLastSurpriseIndex = (int)chosenIdx;
+
+            const FilteredChord& chord = mFilteredBuffers[front][chosenIdx];
+            playChordToVoice(channel, note, velocity, chord.notes, chord.count, offset, midiOutputBlock, baseTime);
+
+            mLastSurpriseChordIndex.store((int)chosenIdx, std::memory_order_relaxed);
+            mSurpriseEventCounter.fetch_add(1, std::memory_order_relaxed);
+        }
+        return; // Always return: surprise trigger key must NEVER voice as a melody note
+    }
+
+    // 3. Performance Melody Harmonizer
     if (mLiveHarmonizerEnabled.load(std::memory_order_relaxed)) {
         mLastTriggeredMelodyNote.store((int)note, std::memory_order_relaxed);
         mHeldMelodyNote.store((int)note, std::memory_order_relaxed);
+
+        // 3a. Common Tones mode: restrict to filtered chords, match top note or round down to nearest available top note
+        if (mSelectionMode.load(std::memory_order_relaxed) == 1) {
+            uint8_t front = mActiveFilteredBuffer.load(std::memory_order_acquire);
+            uint16_t count = mFilteredCounts[front];
+            if (count == 0) {
+                return;
+            }
+
+            int bestTopNote = -1;
+            uint8_t minTopNote = 127;
+            for (uint16_t i = 0; i < count; ++i) {
+                uint8_t tn = mFilteredBuffers[front][i].topNote;
+                if (tn < minTopNote) minTopNote = tn;
+                if (tn <= note && (int)tn > bestTopNote) {
+                    bestTopNote = (int)tn;
+                }
+            }
+            if (bestTopNote < 0) {
+                bestTopNote = (int)minTopNote;
+            }
+
+            uint16_t matching[MAX_FILTERED_CHORDS];
+            uint16_t matchCount = 0;
+            for (uint16_t i = 0; i < count; ++i) {
+                if (mFilteredBuffers[front][i].topNote == (uint8_t)bestTopNote) {
+                    matching[matchCount++] = i;
+                }
+            }
+
+            if (matchCount > 0) {
+                uint16_t chosenIdx = matching[fastRand() % matchCount];
+                const FilteredChord& chord = mFilteredBuffers[front][chosenIdx];
+                playChordToVoice(channel, note, velocity, chord.notes, chord.count, offset, midiOutputBlock, baseTime);
+
+                mLastCommonToneChordIndex.store((int)chosenIdx, std::memory_order_relaxed);
+                mCommonToneEventCounter.fetch_add(1, std::memory_order_relaxed);
+            }
+            return;
+        }
 
         uint8_t targetFamily = mSelectedFamily.load(std::memory_order_relaxed);
 
@@ -311,7 +412,11 @@ void Engine::handleNoteOff(
         }
     }
 
-    if (!foundVoice && !(note >= baseTrigger && note < baseTrigger + NUM_CHORD_SLOTS)) {
+    bool isSlotKey = (note >= baseTrigger && note < baseTrigger + NUM_CHORD_SLOTS);
+    bool isSurpriseKey = (note == SURPRISE_TRIGGER_NOTE);
+    bool isCommonToneBlocked = (mLiveHarmonizerEnabled.load(std::memory_order_relaxed) &&
+                                mSelectionMode.load(std::memory_order_relaxed) == 1);
+    if (!foundVoice && !isSlotKey && !isSurpriseKey && !isCommonToneBlocked) {
         uint8_t bytes[3] = { (uint8_t)(0x80 | (channel & 0x0F)), note, 0 };
         midiOutputBlock(st, 0, 3, bytes);
     }

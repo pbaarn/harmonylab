@@ -70,15 +70,21 @@ public struct FilterBarView: View {
 
                 Spacer()
 
-                // Surprise Me Button (picks from the current list, in either mode)
+                // Surprise Me Button (picks from the current list, in either mode, also triggered by MIDI A#2)
                 Button(action: { viewModel.surpriseMe() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 11, weight: .semibold))
                         Text("Surprise Me")
                             .font(.system(size: 11, weight: .bold))
+                        Text("A#2")
+                            .font(.system(size: 8, weight: .black, design: .monospaced))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.black.opacity(0.25))
+                            .cornerRadius(3)
                     }
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .background(surpriseEnabled ? Color.blue : Color(white: 0.22))
                     .foregroundColor(surpriseEnabled ? .white : Color(white: 0.5))
@@ -89,7 +95,7 @@ public struct FilterBarView: View {
                 .disabled(!surpriseEnabled)
                 .help(isCommonTones && !viewModel.hasEnoughCommonTones
                       ? "Pick at least \(HarmonyLabViewModel.minCommonTones) common tones first"
-                      : "Play a random chord from the list")
+                      : "Play a random chord from the list (MIDI A#2)")
             }
 
             // Pitch Class Buttons (2 rows of 6)

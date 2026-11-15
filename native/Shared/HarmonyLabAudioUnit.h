@@ -14,6 +14,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setAddBassEnabled:(BOOL)enabled;
 - (void)setOctaveOffset:(NSInteger)offset;
 - (void)setTriggerBaseNote:(uint8_t)baseNote;
+- (void)setSelectionMode:(uint8_t)mode;
+- (void)beginFilteredChordBatch;
+- (void)addFilteredChordNotes:(const uint8_t *)notes count:(uint8_t)count topNote:(uint8_t)topNote;
+- (void)commitFilteredChordBatch;
 
 // Polling triggers & live voiced surprise chord from UI
 - (NSInteger)getLastTriggeredSlot;
@@ -29,6 +33,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSInteger)getLastVoicedMelodyNote;
 - (uint32_t)getVoicedEventCounter;
 - (void)clearLastVoicedInfo;
+
+- (NSInteger)getLastSurpriseChordIndex;
+- (uint32_t)getSurpriseEventCounter;
+
+- (NSInteger)getLastCommonToneChordIndex;
+- (uint32_t)getCommonToneEventCounter;
 
 // Audition triggering from UI buttons
 - (void)triggerAuditionNotes:(const uint8_t *)notes count:(uint8_t)count;

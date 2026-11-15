@@ -70,33 +70,46 @@ public struct HarmonyLabRootView: View {
                 .buttonStyle(PlainButtonStyle())
                 .help("Adds root bass note 1-2 octaves below")
 
-                // Octave Shift (-8va, 8va, +8va)
-                HStack(spacing: 2) {
-                    Button(action: { if (viewModel.octaveOffset > -2) { viewModel.octaveOffset -= 1 } }) {
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 9, weight: .bold))
-                            .frame(width: 20, height: 20)
-                            .background(Color(white: 0.18))
-                            .foregroundColor(.white)
-                            .cornerRadius(4)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-
-                    Text(viewModel.octaveOffset == 0 ? "8va" : "\(viewModel.octaveOffset > 0 ? "+" : "")\(viewModel.octaveOffset)8va")
+                // Octave Transpose (-3 to +3 octaves)
+                HStack(spacing: 3) {
+                    Text("Oct:")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .frame(width: 32)
+                        .foregroundColor(.secondary)
 
-                    Button(action: { if (viewModel.octaveOffset < 2) { viewModel.octaveOffset += 1 } }) {
-                        Image(systemName: "arrow.up")
+                    Button(action: { if viewModel.octaveOffset > -3 { viewModel.octaveOffset -= 1 } }) {
+                        Image(systemName: "minus")
                             .font(.system(size: 9, weight: .bold))
                             .frame(width: 20, height: 20)
                             .background(Color(white: 0.18))
-                            .foregroundColor(.white)
+                            .foregroundColor(viewModel.octaveOffset > -3 ? .white : .secondary)
                             .cornerRadius(4)
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .disabled(viewModel.octaveOffset <= -3)
+
+                    Button(action: { viewModel.octaveOffset = 0 }) {
+                        Text(viewModel.octaveOffset == 0 ? "0" : "\(viewModel.octaveOffset > 0 ? "+" : "")\(viewModel.octaveOffset)")
+                            .font(.system(size: 10, weight: .black, design: .monospaced))
+                            .foregroundColor(viewModel.octaveOffset == 0 ? .white : .cyan)
+                            .frame(width: 24, height: 20)
+                            .background(Color(white: 0.14))
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Click to reset octave transpose to 0")
+
+                    Button(action: { if viewModel.octaveOffset < 3 { viewModel.octaveOffset += 1 } }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .bold))
+                            .frame(width: 20, height: 20)
+                            .background(Color(white: 0.18))
+                            .foregroundColor(viewModel.octaveOffset < 3 ? .white : .secondary)
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(viewModel.octaveOffset >= 3)
                 }
+                .help("Transpose output chords in octaves (-3 to +3)")
 
                 // Global MIDI Drag for Active Voicing
                 if let chord = viewModel.activeVoicing {

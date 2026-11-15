@@ -50,6 +50,7 @@ public class HarmonyLabViewModel: ObservableObject {
     @Published public var selectionMode: SelectionMode = .topNote {
         didSet {
             guard oldValue != selectionMode else { return }
+            audioUnit?.setSelectionMode(selectionMode == .commonTones ? 1 : 0)
             refreshMatchingVoicings()
             saveSettings()
         }
@@ -95,7 +96,11 @@ public class HarmonyLabViewModel: ObservableObject {
             audioUnit?.setAddBassEnabled(addBass)
             syncActiveVoicingToAudioUnit()
             // The bass note counts as a sounding common tone, so the list can change
-            if selectionMode == .commonTones { refreshMatchingVoicings() }
+            if selectionMode == .commonTones {
+                refreshMatchingVoicings()
+            } else {
+                syncFilteredVoicingsToAudioUnit()
+            }
             saveSettings()
         }
     }
@@ -121,6 +126,8 @@ public class HarmonyLabViewModel: ObservableObject {
     private var allFilteredVoicings: [NativeVoicing] = []
     private var lastRecordedEventCounter: UInt32 = 0
     private var lastRecordedSlotCounter: UInt32 = 0
+    private var lastRecordedSurpriseCounter: UInt32 = 0
+    private var lastRecordedCommonToneCounter: UInt32 = 0
 
     public static func familyCode(for family: ChordFamily) -> UInt8 {
         switch family {
@@ -187,7 +194,31 @@ public class HarmonyLabViewModel: ObservableObject {
                 self.lastTriggeredMelodyNote = newTriggeredMelody
             }
 
-            // Real-time synchronization of Live Surprise Chord on EVERY key press
+            // Real-time synchronization of Surprise Me MIDI trigger (A#2)
+            let surpriseCounter = au.getSurpriseEventCounter()
+            if self.lastRecordedSurpriseCounter != surpriseCounter {
+                self.lastRecordedSurpriseCounter = surpriseCounter
+                let idx = Int(au.getLastSurpriseChordIndex())
+                if idx >= 0 && idx < self.matchingVoicings.count {
+                    let chord = self.matchingVoicings[idx]
+                    self.activeVoicing = chord
+                    self.addToHistory(chord)
+                }
+            }
+
+            // Real-time synchronization of Common Tones keyboard harmonizer
+            let ctCounter = au.getCommonToneEventCounter()
+            if self.lastRecordedCommonToneCounter != ctCounter {
+                self.lastRecordedCommonToneCounter = ctCounter
+                let idx = Int(au.getLastCommonToneChordIndex())
+                if idx >= 0 && idx < self.matchingVoicings.count {
+                    let chord = self.matchingVoicings[idx]
+                    self.activeVoicing = chord
+                    self.addToHistory(chord)
+                }
+            }
+
+            // Real-time synchronization of Live Surprise Chord on EVERY key press (Top Note mode)
             let currentEventCounter = au.getVoicedEventCounter()
             if self.lastRecordedEventCounter != currentEventCounter {
                 self.lastRecordedEventCounter = currentEventCounter
@@ -198,9 +229,9 @@ public class HarmonyLabViewModel: ObservableObject {
                 if recipeIdx >= 0 && voicedMelody >= 0 && voicedMelody <= 127 {
                     let targetTopMidi = UInt8(voicedMelody)
 
-                    // Guard: Ensure slot trigger keys are NEVER treated as melody surprise chords!
+                    // Guard: Ensure slot trigger keys and A#2 surprise key are NEVER treated as melody chords!
                     let baseTrigger = self.triggerBaseNote
-                    if targetTopMidi >= baseTrigger && targetTopMidi < baseTrigger + 10 {
+                    if (targetTopMidi >= baseTrigger && targetTopMidi < baseTrigger + 10) || targetTopMidi == 46 {
                         return
                     }
 
@@ -299,6 +330,7 @@ public class HarmonyLabViewModel: ObservableObject {
                 $0.styleTags.contains(where: { $0.lowercased().contains(q) })
             }
         }
+        syncFilteredVoicingsToAudioUnit()
     }
 
     public func surpriseMe() {
@@ -361,8 +393,10 @@ public class HarmonyLabViewModel: ObservableObject {
 
     public func selectHistoryChord(_ historyItem: ChordHistoryItem) {
         let chord = historyItem.chord
-        let (pc, oct) = VoicingsEngine.parseNoteName(chord.topNote)
-        self.updateTopNote(pitchClass: pc, octave: oct)
+        if selectionMode == .topNote {
+            let (pc, oct) = VoicingsEngine.parseNoteName(chord.topNote)
+            self.updateTopNote(pitchClass: pc, octave: oct)
+        }
         self.activeVoicing = chord
         triggerAudition(chord)
     }
@@ -398,7 +432,9 @@ public class HarmonyLabViewModel: ObservableObject {
         }
 
         // 1. Instant audio preview via polyphonic synth engine (works in Standalone & AUv3)
-        ChordPreviewPlayer.shared.playChord(notes)
+        let shift = octaveOffset * 12
+        let previewNotes = shift == 0 ? notes : notes.map { UInt8(clamping: Int($0) + shift) }
+        ChordPreviewPlayer.shared.playChord(previewNotes)
 
         // 2. Transmit MIDI notes through AudioUnit (for Logic Pro track instrument)
         audioUnit?.triggerAuditionNotes(notes, count: UInt8(notes.count))
@@ -427,10 +463,28 @@ public class HarmonyLabViewModel: ObservableObject {
         au.setAddBassEnabled(addBass)
         au.setOctaveOffset(octaveOffset * 12)
         au.setTriggerBaseNote(triggerBaseNote)
+        au.setSelectionMode(selectionMode == .commonTones ? 1 : 0)
         syncActiveVoicingToAudioUnit()
+        syncFilteredVoicingsToAudioUnit()
         for i in 0..<10 {
             syncSlotToAudioUnit(i)
         }
+    }
+
+    private func syncFilteredVoicingsToAudioUnit() {
+        guard let au = audioUnit else { return }
+        au.beginFilteredChordBatch()
+        for v in matchingVoicings.prefix(600) {
+            var notes = v.midiNotes
+            if addBass, let bass = v.bassNoteMidi {
+                if !notes.contains(bass) {
+                    notes.insert(bass, at: 0)
+                }
+            }
+            let topNote = v.midiNotes.last ?? 60
+            au.addFilteredChordNotes(notes, count: UInt8(notes.count), topNote: topNote)
+        }
+        au.commitFilteredChordBatch()
     }
 
     private func syncActiveVoicingToAudioUnit() {
