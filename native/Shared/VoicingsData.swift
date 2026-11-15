@@ -134,6 +134,10 @@ public class VoicingsEngine {
         return "\(sharpNames[idx])\(oct)"
     }
 
+    public static func pitchClassIndex(_ pc: String) -> Int {
+        pitchClasses.firstIndex(of: normalizePitchClass(pc)) ?? 0
+    }
+
     public static func parseNoteName(_ noteName: String) -> (pitchClass: String, octave: Int) {
         let midi = noteNameToMidi(noteName)
         let oct = (Int(midi) / 12) - 1
@@ -866,6 +870,65 @@ public class VoicingsEngine {
             }
         }
 
+        return results
+    }
+
+    // MARK: - Common Tones Mode
+
+    /// Cached original top-note MIDI for each seed (avoids regex parsing in hot loops).
+    private static let seedTopMidis: [UInt8] = seedVoicings.map { noteNameToMidi($0.topNote) }
+
+    /// Returns every voicing (all 50 shapes × 12 transpositions, kept near their original register)
+    /// whose *sounding* notes contain ALL of the given pitch classes (0 = C … 11 = B).
+    /// Voicings that put a common tone in the top voice are listed first, since that is the most audible link.
+    public func getCommonToneVoicings(
+        pitchClasses: [Int],
+        family: ChordFamily = .all,
+        includeBass: Bool
+    ) -> [NativeVoicing] {
+        let required = Set(pitchClasses.map { (($0 % 12) + 12) % 12 })
+        guard !required.isEmpty else { return [] }
+
+        var results: [NativeVoicing] = []
+        var seen = Set<String>()
+
+        for (idx, seed) in VoicingsEngine.seedVoicings.enumerated() {
+            if family != .all && seed.family != family { continue }
+            let origTop = Int(VoicingsEngine.seedTopMidis[idx])
+
+            // Try each transposition that keeps the shape within ±6 semitones of its original register
+            for delta in -6...5 {
+                let target = origTop + delta
+                guard target >= 0 && target <= 127 else { continue }
+
+                var pcs = Set<Int>()
+                for n in seed.midiNotes { pcs.insert(((Int(n) + delta) % 12 + 12) % 12) }
+                if includeBass, let b = seed.bassNoteMidi { pcs.insert(((Int(b) + delta) % 12 + 12) % 12) }
+                guard required.isSubset(of: pcs) else { continue }
+
+                guard let v = voicingForRecipe(index: idx, targetTopMidi: UInt8(target)) else { continue }
+                let sig = "\(v.chordSymbol)-\(v.midiNotes)"
+                if seen.insert(sig).inserted {
+                    results.append(v)
+                }
+            }
+        }
+
+        // Rank: common tone in the top voice first, then by root (C → B), then by chord symbol
+        func topIsCommon(_ v: NativeVoicing) -> Bool {
+            guard let top = v.midiNotes.last else { return false }
+            return required.contains(Int(top) % 12)
+        }
+        func rootIndex(_ v: NativeVoicing) -> Int {
+            VoicingsEngine.sharpNames.firstIndex(of: v.root) ?? VoicingsEngine.pitchClassIndex(v.root)
+        }
+        results.sort { a, b in
+            let ta = topIsCommon(a), tb = topIsCommon(b)
+            if ta != tb { return ta }
+            let ra = rootIndex(a), rb = rootIndex(b)
+            if ra != rb { return ra < rb }
+            return a.chordSymbol.localizedStandardCompare(b.chordSymbol) == .orderedAscending
+        }
         return results
     }
 

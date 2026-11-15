@@ -87,12 +87,13 @@ public struct VoicingListView: View {
 
                         if viewModel.matchingVoicings.isEmpty {
                             VStack(spacing: 6) {
-                                Text("No matching voicings")
+                                Text(emptyTitle)
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundColor(.secondary)
-                                Text("Try another melody note or family.")
+                                Text(emptyHint)
                                     .font(.system(size: 10))
                                     .foregroundColor(Color.white.opacity(0.3))
+                                    .multilineTextAlignment(.center)
                             }
                             .padding(.vertical, 30)
                         }
@@ -117,6 +118,22 @@ public struct VoicingListView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+
+    private var emptyTitle: String {
+        if viewModel.selectionMode == .commonTones && !viewModel.hasEnoughCommonTones {
+            return "Pick at least \(HarmonyLabViewModel.minCommonTones) common tones"
+        }
+        return "No matching voicings"
+    }
+
+    private var emptyHint: String {
+        if viewModel.selectionMode == .commonTones {
+            return viewModel.hasEnoughCommonTones
+                ? "No chord contains all of these notes.\nRemove a note or choose another family."
+                : "Two shared notes give a clear link\nbetween chords."
+        }
+        return "Try another melody note or family."
     }
 
     private func scrollToActive(proxy: ScrollViewProxy) {

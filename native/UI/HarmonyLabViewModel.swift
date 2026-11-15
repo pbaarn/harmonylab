@@ -15,6 +15,7 @@ public class HarmonyLabViewModel: ObservableObject {
     }
 
     private var isBatchUpdating = false
+    private var isLoadingSettings = false
     private var saveHistoryWorkItem: DispatchWorkItem?
 
     // Filter controls
@@ -37,6 +38,29 @@ public class HarmonyLabViewModel: ObservableObject {
     }
     @Published public var searchQuery: String = "" {
         didSet { filterVoicings() }
+    }
+
+    // Selection mode: single melody top note, or a set of common tones
+    public enum SelectionMode: String, CaseIterable, Identifiable {
+        case topNote = "Top Note"
+        case commonTones = "Common Tones"
+        public var id: String { rawValue }
+    }
+
+    @Published public var selectionMode: SelectionMode = .topNote {
+        didSet {
+            guard oldValue != selectionMode else { return }
+            refreshMatchingVoicings()
+            saveSettings()
+        }
+    }
+
+    /// Selected common tones as pitch-class indices (0 = C … 11 = B), in pick order.
+    @Published public var commonTones: [Int] = [] {
+        didSet {
+            if selectionMode == .commonTones { refreshMatchingVoicings() }
+            saveSettings()
+        }
     }
 
     public func updateTopNote(pitchClass: String, octave: Int) {
@@ -70,6 +94,8 @@ public class HarmonyLabViewModel: ObservableObject {
         didSet {
             audioUnit?.setAddBassEnabled(addBass)
             syncActiveVoicingToAudioUnit()
+            // The bass note counts as a sounding common tone, so the list can change
+            if selectionMode == .commonTones { refreshMatchingVoicings() }
             saveSettings()
         }
     }
@@ -183,7 +209,10 @@ public class HarmonyLabViewModel: ObservableObject {
                         let melodyOct = (Int(targetTopMidi) / 12) - 1
 
                         // Batch update pitch and octave to avoid double refresh
-                        self.updateTopNote(pitchClass: melodyPc, octave: melodyOct)
+                        // (in Common Tones mode the list is driven by the chosen tones, not by the played note)
+                        if self.selectionMode == .topNote {
+                            self.updateTopNote(pitchClass: melodyPc, octave: melodyOct)
+                        }
 
                         // Immediately update the displayed active voicing on this exact key press
                         if let matching = self.matchingVoicings.first(where: {
@@ -204,12 +233,58 @@ public class HarmonyLabViewModel: ObservableObject {
     }
 
     public func refreshMatchingVoicings() {
-        allFilteredVoicings = VoicingsEngine.shared.getVoicings(
-            topPitchClass: selectedPitchClass,
-            topOctave: selectedOctave,
-            family: selectedFamily
-        )
+        switch selectionMode {
+        case .topNote:
+            allFilteredVoicings = VoicingsEngine.shared.getVoicings(
+                topPitchClass: selectedPitchClass,
+                topOctave: selectedOctave,
+                family: selectedFamily
+            )
+        case .commonTones:
+            if hasEnoughCommonTones {
+                allFilteredVoicings = VoicingsEngine.shared.getCommonToneVoicings(
+                    pitchClasses: commonTones,
+                    family: selectedFamily,
+                    includeBass: addBass
+                )
+            } else {
+                allFilteredVoicings = []
+            }
+        }
         filterVoicings()
+    }
+
+    // MARK: - Common Tones Mode
+
+    /// Two notes is the minimum: a single shared note matches roughly half of all chords and gives
+    /// no audible harmonic link, while a shared dyad (two notes) is the classic pivot between chords.
+    public static let minCommonTones = 2
+    public static let maxCommonTones = 4
+
+    public var hasEnoughCommonTones: Bool {
+        commonTones.count >= HarmonyLabViewModel.minCommonTones
+    }
+
+    public func isCommonTone(_ pitchClassName: String) -> Bool {
+        commonTones.contains(VoicingsEngine.pitchClassIndex(pitchClassName))
+    }
+
+    public func toggleCommonTone(_ pitchClassName: String) {
+        let pc = VoicingsEngine.pitchClassIndex(pitchClassName)
+        if let i = commonTones.firstIndex(of: pc) {
+            commonTones.remove(at: i)
+        } else if commonTones.count < HarmonyLabViewModel.maxCommonTones {
+            commonTones.append(pc)
+        }
+    }
+
+    public func clearCommonTones() {
+        commonTones.removeAll()
+    }
+
+    /// Human readable list of selected common tones, in the order they were picked.
+    public var commonTonesLabel: String {
+        commonTones.map { VoicingsEngine.pitchClasses[$0] }.joined(separator: " · ")
     }
 
     private func filterVoicings() {
@@ -228,7 +303,9 @@ public class HarmonyLabViewModel: ObservableObject {
 
     public func surpriseMe() {
         let pool = matchingVoicings.isEmpty ? allFilteredVoicings : matchingVoicings
-        guard let choice = pool.randomElement() else { return }
+        // Avoid repeating the chord that is already showing when there is a choice
+        let candidates = pool.count > 1 ? pool.filter { !isVoicingSelected($0) } : pool
+        guard let choice = candidates.randomElement() else { return }
         self.activeVoicing = choice
         triggerAudition(choice)
         self.addToHistory(choice)
@@ -402,13 +479,26 @@ public class HarmonyLabViewModel: ObservableObject {
 
     // Settings persistence
     private func saveSettings() {
+        // While loading, each property's didSet would otherwise overwrite not-yet-loaded values with defaults
+        guard !isLoadingSettings else { return }
         UserDefaults.standard.set(triggerBaseNote, forKey: "HarmonyLab_TriggerBaseNote_v1")
         UserDefaults.standard.set(addBass, forKey: "HarmonyLab_AddBass_v1")
         UserDefaults.standard.set(octaveOffset, forKey: "HarmonyLab_OctaveOffset_v1")
         UserDefaults.standard.set(selectedFamily.rawValue, forKey: "HarmonyLab_SelectedFamily_v1")
+        UserDefaults.standard.set(selectionMode.rawValue, forKey: "HarmonyLab_SelectionMode_v1")
+        UserDefaults.standard.set(commonTones, forKey: "HarmonyLab_CommonTones_v1")
     }
 
     private func loadSettings() {
+        isLoadingSettings = true
+        defer { isLoadingSettings = false }
+        if let savedMode = UserDefaults.standard.string(forKey: "HarmonyLab_SelectionMode_v1"),
+           let mode = SelectionMode(rawValue: savedMode) {
+            self.selectionMode = mode
+        }
+        if let savedTones = UserDefaults.standard.array(forKey: "HarmonyLab_CommonTones_v1") as? [Int] {
+            self.commonTones = Array(savedTones.filter { (0..<12).contains($0) }.prefix(HarmonyLabViewModel.maxCommonTones))
+        }
         if let savedBase = UserDefaults.standard.object(forKey: "HarmonyLab_TriggerBaseNote_v1") as? UInt8 {
             self.triggerBaseNote = savedBase
         }
