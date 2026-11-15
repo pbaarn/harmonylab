@@ -96,7 +96,7 @@ private:
     void handleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity, int offset, AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime);
     void handleNoteOff(uint8_t channel, uint8_t note, int offset, AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime);
     void allNotesOff(AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime);
-    void playChordToVoice(uint8_t channel, uint8_t triggerKey, uint8_t velocity, const uint8_t* notes, uint8_t count, int offset, AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime);
+    void playChordToVoice(uint8_t channel, uint8_t triggerKey, uint8_t velocity, const uint8_t* notes, uint8_t count, int offset, AUMIDIOutputEventBlock midiOutputBlock, AUEventSampleTime baseTime, int extraOctaveShift = 0);
 
     // Fast lock-free XorShift32 PRNG for audio thread
     inline uint32_t fastRand() {

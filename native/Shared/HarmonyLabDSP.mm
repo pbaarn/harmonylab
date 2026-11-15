@@ -180,7 +180,8 @@ void Engine::playChordToVoice(
     uint8_t count,
     int offset,
     AUMIDIOutputEventBlock midiOutputBlock,
-    AUEventSampleTime baseTime
+    AUEventSampleTime baseTime,
+    int extraOctaveShift
 ) {
     if (count == 0 || !notes) return;
     ActiveVoice* targetVoice = nullptr;
@@ -198,7 +199,7 @@ void Engine::playChordToVoice(
     targetVoice->noteCount = safeCount;
     targetVoice->active = true;
 
-    int octOffset = mOctaveOffset.load(std::memory_order_relaxed);
+    int octOffset = mOctaveOffset.load(std::memory_order_relaxed) + extraOctaveShift;
     AUEventSampleTime st = (baseTime != AUEventSampleTimeImmediate) ? (baseTime + offset) : AUEventSampleTimeImmediate;
 
     for (uint8_t n = 0; n < safeCount; ++n) {
@@ -258,7 +259,8 @@ void Engine::handleNoteOn(
         mLastTriggeredMelodyNote.store((int)note, std::memory_order_relaxed);
         mHeldMelodyNote.store((int)note, std::memory_order_relaxed);
 
-        // 3a. Common Tones mode: restrict to filtered chords, match top note or round down to nearest available top note
+        // 3a. Common Tones mode: match played pitch class (in any octave), stepping down chromatically if needed,
+        // and shift the selected chord by octaves to match the played note's register.
         if (mSelectionMode.load(std::memory_order_relaxed) == 1) {
             uint8_t front = mActiveFilteredBuffer.load(std::memory_order_acquire);
             uint16_t count = mFilteredCounts[front];
@@ -266,31 +268,32 @@ void Engine::handleNoteOn(
                 return;
             }
 
-            int bestTopNote = -1;
-            uint8_t minTopNote = 127;
-            for (uint16_t i = 0; i < count; ++i) {
-                uint8_t tn = mFilteredBuffers[front][i].topNote;
-                if (tn < minTopNote) minTopNote = tn;
-                if (tn <= note && (int)tn > bestTopNote) {
-                    bestTopNote = (int)tn;
-                }
-            }
-            if (bestTopNote < 0) {
-                bestTopNote = (int)minTopNote;
-            }
-
+            uint8_t playedPc = note % 12;
             uint16_t matching[MAX_FILTERED_CHORDS];
             uint16_t matchCount = 0;
-            for (uint16_t i = 0; i < count; ++i) {
-                if (mFilteredBuffers[front][i].topNote == (uint8_t)bestTopNote) {
-                    matching[matchCount++] = i;
+            int foundStep = 0;
+
+            for (int step = 0; step < 12; ++step) {
+                uint8_t targetPc = (uint8_t)((playedPc + 12 - step) % 12);
+                matchCount = 0;
+                for (uint16_t i = 0; i < count; ++i) {
+                    if ((mFilteredBuffers[front][i].topNote % 12) == targetPc) {
+                        matching[matchCount++] = i;
+                    }
+                }
+                if (matchCount > 0) {
+                    foundStep = step;
+                    break;
                 }
             }
 
             if (matchCount > 0) {
                 uint16_t chosenIdx = matching[fastRand() % matchCount];
                 const FilteredChord& chord = mFilteredBuffers[front][chosenIdx];
-                playChordToVoice(channel, note, velocity, chord.notes, chord.count, offset, midiOutputBlock, baseTime);
+                int targetTopMidi = (int)note - foundStep;
+                int octaveShift = targetTopMidi - (int)chord.topNote; // Guaranteed multiple of 12
+
+                playChordToVoice(channel, note, velocity, chord.notes, chord.count, offset, midiOutputBlock, baseTime, octaveShift);
 
                 mLastCommonToneChordIndex.store((int)chosenIdx, std::memory_order_relaxed);
                 mCommonToneEventCounter.fetch_add(1, std::memory_order_relaxed);
